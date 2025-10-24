@@ -1,6 +1,12 @@
+# config.py
 from dataclasses import dataclass
 import os
+from enum import Enum
 
+class ObstacleType(Enum):
+    NONE = "none"
+    PARALLELEPIPED = "parallelepiped"
+    CYLINDER = "cylinder"
 
 @dataclass
 class ExperimentConfig:
@@ -17,11 +23,17 @@ class ExperimentConfig:
     I_p: int = 10
     Ro: float = 0.035
     Sg_p: int = 1
-    ha: float = 60.0
-    a: float = 10.0
+    # Параметры параллелепипеда
+    parallelepiped_height: float = 60.0
+    parallelepiped_width: float = 10.0
+    parallelepiped_length: float = 500.0
+    # Параметры цилиндрической помехи - уменьшен размер и смещен ниже
+    cylinder_radius: float = 10.0  # Уменьшен с 30.0 до 15.0 см
+    cylinder_height: float = 65.0  #
+    cylinder_length: float = 500.0
+    # Тип помехи
+    obstacle_type: ObstacleType = ObstacleType.NONE
     seed: int = 42
-    use_parallelepiped: bool = True
 
     def __post_init__(self):
-        # Создаем папку для графиков
         os.makedirs('plots', exist_ok=True)

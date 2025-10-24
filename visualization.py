@@ -1,5 +1,5 @@
+# visualization.py
 import matplotlib
-
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,19 +14,21 @@ class ExperimentVisualizer:
     def create_comprehensive_plots(self, H_ideal: np.ndarray, V_ideal: np.ndarray,
                                    Hs: np.ndarray, Vs: np.ndarray, Vs_smooth: np.ndarray,
                                    experiment_name: str = ""):
-        """Создание комплексных графиков с ВСЕМИ промежуточными величинами"""
 
-        # 1. Основной график: все кривые
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(19.2, 10.8))
         plt.plot(H_ideal, V_ideal, 'b-', linewidth=2, label='Идеальная кривая V(H)')
         plt.plot(Hs, Vs, 'ro', markersize=2, alpha=0.6, label='Зашумленные данные Vs')
         plt.plot(Hs, Vs_smooth, 'g-', linewidth=1.5, label='Сглаженные данные Vs_s')
 
-        # Область параллелепипеда
-        parallelepiped_info = self.results.geometry.get_parallelepiped_info()
-        if parallelepiped_info:
-            plt.axvspan(parallelepiped_info['start_height'], parallelepiped_info['end_height'],
-                        alpha=0.2, color='orange', label='Область параллелепипеда')
+        # Используем новый метод get_obstacle_info() вместо get_parallelepiped_info()
+        obstacle_info = self.results.geometry.get_obstacle_info()
+        if obstacle_info:
+            if obstacle_info['type'] == 'parallelepiped':
+                plt.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
+                            alpha=0.2, color='orange', label='Область параллелепипеда')
+            elif obstacle_info['type'] == 'cylinder':
+                plt.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
+                            alpha=0.2, color='red', label='Область цилиндрической помехи')
 
         plt.axvspan(H_ideal[self.results.config.I_beg], H_ideal[self.results.config.I_end],
                     alpha=0.2, color='yellow', label='Область анализа I_beg-I_end')
@@ -40,7 +42,7 @@ class ExperimentVisualizer:
         plt.close()
 
         # 2. График ошибок
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(19.2, 10.8))
 
         plt.subplot(2, 1, 1)
         dH = H_ideal - Hs
@@ -64,7 +66,7 @@ class ExperimentVisualizer:
 
         # 3. Процесс сглаживания
         if len(self.results.iteration_stats) > 0:
-            plt.figure(figsize=(10, 6))
+            plt.figure(figsize=(19.2, 10.8))
             iterations = [stat['iteration'] for stat in self.results.iteration_stats]
             max_errors = [stat['max_error'] for stat in self.results.iteration_stats]
             deriv_errors = [stat['derivative_error'] for stat in self.results.iteration_stats]
@@ -81,7 +83,7 @@ class ExperimentVisualizer:
 
         # 4. Полуцелые узлы
         if len(self.results.half_nodes_data) > 0:
-            plt.figure(figsize=(10, 6))
+            plt.figure(figsize=(19.2, 10.8))
             half_nodes = self.results.half_nodes_data
             H_half = [node['H'] for node in half_nodes]
             errors = [node['error1'] for node in half_nodes]
@@ -96,7 +98,7 @@ class ExperimentVisualizer:
 
         # 5. Ошибки производных
         if len(self.results.derivative_stats['Del_V1']) > 0:
-            plt.figure(figsize=(12, 8))
+            plt.figure(figsize=(19.2, 10.8))
 
             # Используем правильные индексы для H_mid
             H_mid = self.results.Hs[self.results.config.I_beg:self.results.config.I_end + 1]
@@ -128,8 +130,8 @@ class ExperimentVisualizer:
         print(f"Графики для '{experiment_name}' сохранены в папке 'plots/'")
 
     def create_comparison_plots(self, experiments_data: dict):
-        """Сравнение экспериментов с параллелепипедом и без"""
-        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+        """Сравнение экспериментов с различными типами помех"""
+        fig, axes = plt.subplots(2, 2, figsize=(19.2, 10.8))
 
         for idx, (exp_name, data) in enumerate(experiments_data.items()):
             ax = axes[idx // 2, idx % 2]
@@ -139,11 +141,15 @@ class ExperimentVisualizer:
             ax.plot(Hs, Vs, 'ro', markersize=1, alpha=0.6, label='Зашумленная Vs')
             ax.plot(Hs, Vs_smooth, 'g-', linewidth=1, label='Сглаженная Vs_s')
 
-            # Параллелепипед
-            parallelepiped_info = self.results.geometry.get_parallelepiped_info()
-            if parallelepiped_info and "с параллелепипедом" in exp_name:
-                ax.axvspan(parallelepiped_info['start_height'], parallelepiped_info['end_height'],
-                           alpha=0.3, color='orange', label='Параллелепипед')
+            # Используем новый метод get_obstacle_info() для определения типа помехи
+            obstacle_info = self.results.geometry.get_obstacle_info()
+            if obstacle_info:
+                if obstacle_info['type'] == 'parallelepiped' and "параллелепипед" in exp_name:
+                    ax.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
+                               alpha=0.3, color='orange', label='Параллелепипед')
+                elif obstacle_info['type'] == 'cylinder' and "цилиндр" in exp_name:
+                    ax.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
+                               alpha=0.3, color='red', label='Цилиндрическая помеха')
 
             ax.set_title(f'Эксперимент: {exp_name}')
             ax.set_xlabel('Высота H (см)')
@@ -152,6 +158,6 @@ class ExperimentVisualizer:
             ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
-        plt.savefig('plots/parallelepiped_comparison.png', dpi=300, bbox_inches='tight')
+        plt.savefig('plots/obstacle_comparison.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print("Сравнение экспериментов сохранено в 'plots/parallelepiped_comparison.png'")
+        print("Сравнение экспериментов сохранено в 'plots/obstacle_comparison.png'")

@@ -1,8 +1,9 @@
+# experiment.py
 from geometry import CylinderGeometry
 from data_processing import DataGenerator, SmoothingProcessor
 from analysis import AnalysisResults
 from visualization import ExperimentVisualizer
-from config import ExperimentConfig
+from config import ExperimentConfig, ObstacleType
 
 
 class CylinderExperiment:
@@ -24,8 +25,15 @@ class CylinderExperiment:
     def run_experiment(self):
         """Запуск эксперимента с выводом КАК В PASCAL"""
         try:
+            # Формируем информацию о типе помехи для вывода
+            obstacle_info = ""
+            if self.config.obstacle_type == ObstacleType.PARALLELEPIPED:
+                obstacle_info = f" (параллелепипед: h={self.config.parallelepiped_height}см, w={self.config.parallelepiped_width}см)"
+            elif self.config.obstacle_type == ObstacleType.CYLINDER:
+                obstacle_info = f" (цилиндр: h={self.config.cylinder_height}см, r={self.config.cylinder_radius}см)"
+
             print(
-                f" R={self.config.R:6.2f} см, L={self.config.L:6.2f} см, Vb={self.geometry.Vb:7.4f} л  Kn={self.config.Kn:3} Sg_p={self.config.Sg_p:2}")
+                f" R={self.config.R:6.2f} см, L={self.config.L:6.2f} см, Vb={self.geometry.Vb:7.4f} л  Kn={self.config.Kn:3} Sg_p={self.config.Sg_p:2}{obstacle_info}")
 
             # 1. Генерация идеальных данных
             print("\n      H      V(H)")
