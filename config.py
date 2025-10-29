@@ -50,7 +50,7 @@ class ExperimentConfig:
     parallelepiped_length: float = 500.0  # Длина параллелепипеда [см]
 
     # Параметры цилиндрической помехи
-    cylinder_radius: float = 10.0  # Радиус цилиндрической помехи [см]
+    cylinder_radius: float = 5.0  # Радиус цилиндрической помехи [см]
     cylinder_height: float = 65.0  # Высота нижней точки цилиндра [см]
     cylinder_length: float = 500.0  # Длина цилиндрической помехи [см]
 

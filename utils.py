@@ -1,51 +1,40 @@
 # utils.py
 """
-Вспомогательные функции для обработки данных
+Вспомогательные классы
 """
 
-import numpy as np
-from typing import Tuple
-
-
-def calculate_segment_volume(h: float, R: float) -> float:
+class DataLoaderXLSX():
     """
-    Вычисление объема сегмента круга
+    Класс для загрузки данных из XLSX файлов.
+    Класс принимает путь к файлу, список имён листов и список имён столбцов для загрузки.
+    Класс возвращает словарь из датафреймов, где ключами являются имена листов.
     """
-    if h <= R:
-        alpha = 2 * np.arccos((R - h) / R)
-        return R ** 2 / 2 * (alpha - np.sin(alpha))
-    else:
-        alpha = 2 * np.arccos((h - R) / R)
-        return np.pi * R ** 2 - R ** 2 / 2 * (alpha - np.sin(alpha))
+    def __init__(self, file_path: str, sheet_names: list, column_names: list):
+        """
+        Инициализация загрузчика данных из XLSX.
 
+        Args:
+            file_path: Путь к XLSX файлу
+            sheet_names: Список имён листов для загрузки
+            column_names: Список имён столбцов для загрузки
+        """
+        self.file_path = file_path
+        self.sheet_names = sheet_names
+        self.column_names = column_names
+        self.data = self.load_data()
+    def load_data(self) -> dict:
+        """
+        Загрузка данных из XLSX файла.
 
-def validate_data(H: np.ndarray, V: np.ndarray) -> bool:
-    """
-    Проверка корректности данных
-    """
-    if len(H) != len(V):
-        return False
-    if np.any(H < 0):
-        return False
-    if np.any(V < 0):
-        return False
-    if not np.all(np.diff(H) > 0):
-        return False
-    if not np.all(np.diff(V) >= 0):
-        return False
+        Returns:
+            Словарь из датафреймов, где ключами являются имена листов
+        """
+        import pandas as pd
 
-    return True
+        data_frames = {}
+        for sheet in self.sheet_names:
+            df = pd.read_excel(self.file_path, sheet_name=sheet, usecols=self.column_names)
+            data_frames[sheet] = df
 
+        return data_frames
 
-def calculate_statistics(ideal: np.ndarray, measured: np.ndarray) -> Tuple[float, float, float]:
-    """
-    Расчет статистик: среднее, мин, макс отклонение
-    """
-    errors = np.abs(ideal - measured)
-    relative_errors = np.abs((ideal - measured) / ideal) * 100
-
-    mean_error = np.mean(errors)
-    max_error = np.max(errors)
-    max_relative_error = np.max(relative_errors)
-
-    return mean_error, max_error, max_relative_error

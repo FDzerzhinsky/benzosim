@@ -9,7 +9,7 @@ from visualization import ExperimentVisualizer, DataExporter
 from config import ExperimentConfig, ObstacleType
 import numpy as np
 from typing import Dict, Tuple
-
+from bspline_new import bspline_
 
 def main():
     """
@@ -82,10 +82,10 @@ def main():
             visualizer.create_comparison_plots(experiments_data, experiment_objects)
 
         # ЭКСПОРТ ДАННЫХ В EXCEL (раскомментировать при необходимости)
-        print("\n" + "=" * 60)
-        print("ЭКСПОРТ ДАННЫХ В EXCEL")
-        print("=" * 60)
-        DataExporter.export_comparison_to_excel(experiments_data, "all_experiments.xlsx")
+        # print("\n" + "=" * 60)
+        # print("ЭКСПОРТ ДАННЫХ В EXCEL")
+        # print("=" * 60)
+        # DataExporter.export_comparison_to_excel(experiments_data, "all_experiments.xlsx")
 
     except Exception as e:
         print(f"Ошибка в основном цикле: {e}")
@@ -140,6 +140,10 @@ def _print_final_report(experiments_data: Dict):
     print("3. Для экспорта данных в Excel: раскомментируйте код в main.py")
     print("=" * 60)
 
+def build():
+    # Инъекция метода из основной программы
+    # level, spline0, spline = bspline_(data_series['raw_cumulative'])
+    pass
 
 if __name__ == "__main__":
     # Запуск полного набора экспериментов
