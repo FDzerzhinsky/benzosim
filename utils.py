@@ -214,6 +214,34 @@ class OriginalSmoother:
         return y1
 
 
+class SafeOriginalSmoother(OriginalSmoother):
+    """
+    Безопасная версия OriginalSmoother с автоматическим определением границ.
+    """
+
+    def safe_smooth_data(self, H: np.ndarray, V_noisy: np.ndarray,
+                         I_p: int = 10, Ro: float = 0.035, Sg_p: int = 1,
+                         max_iter: int = 20, target_error: float = 0.001) -> np.ndarray:
+        """
+        Безопасное сглаживание с автоматическим определением рабочих границ
+        с учетом буферных точек I_p.
+        """
+        # Автоматически определяем безопасные границы
+        I_beg = I_p  # Начинаем с I_p, чтобы избежать отрицательных индексов
+        I_end = len(H) - 1 - I_p  # Заканчиваем за I_p до конца
+
+        # Проверяем, что диапазон валиден
+        if I_beg >= I_end:
+            print(f"   ВНИМАНИЕ: Недостаточно точек для безопасного сглаживания. I_beg={I_beg}, I_end={I_end}")
+            print(f"   Возвращаются исходные данные")
+            return V_noisy.copy()
+
+        print(f"   Безопасный диапазон: I_beg={I_beg}, I_end={I_end} (всего точек: {len(H)})")
+
+        # Вызываем родительский метод с безопасными границами
+        V_smooth = self.smooth_data(H, V_noisy, I_beg, I_end, I_p, Ro, Sg_p, max_iter, target_error)
+
+        return V_smooth
 def scipy_smooth(H: np.ndarray, V_noisy: np.ndarray,
                  I_beg: int, I_end: int, smooth_factor: float = 0.1) -> np.ndarray:
     """

@@ -10,7 +10,7 @@ import matplotlib
 matplotlib.use('qt5agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
-from utils import DataLoaderXLSX, add_measurement_noise, OriginalSmoother, scipy_smooth, calculate_derivative, save_plot
+from utils import *
 
 
 def main():
@@ -104,6 +104,36 @@ def main():
     # ТОЛЬКО загрузка, без сортировок и проверок
     H_real = df['OIL_LEVEL'].values
     V_real = df['VOLUME'].values
+
+    # ПРЕДВАРИТЕЛЬНОЕ СГЛАЖИВАНИЕ
+    PRE_SMOOTH = False  # Флаг включения/выключения предварительного сглаживания
+    PRE_SMOOTH_METHOD = "original"  # "scipy" или "original"
+
+    if PRE_SMOOTH:
+        print("Предварительное сглаживание исходных данных...")
+
+        if PRE_SMOOTH_METHOD == "scipy":
+            # SciPy сглаживание
+            pre_smooth_factor = 0.02
+            V_real = scipy_smooth(H_real, V_real, I_beg=0, I_end=len(H_real) - 1,
+                                  smooth_factor=pre_smooth_factor)
+            print(f"   Метод: SciPy, factor={pre_smooth_factor}")
+
+        elif PRE_SMOOTH_METHOD == "original":
+            # Безопасный оригинальный алгоритм
+            pre_smooth_params = {
+                'I_p': 5,
+                'Ro': 0.02,
+                'max_iter': 20,
+                'target_error': 0.001,
+                'Sg_p': 2  # Теперь можно использовать Sg_p=2
+            }
+            safe_smoother = SafeOriginalSmoother()
+            V_real = safe_smoother.safe_smooth_data(H_real, V_real, **pre_smooth_params)
+            print(f"   Метод: SafeOriginal, params={pre_smooth_params}")
+
+        print("   Предварительное сглаживание завершено")
+
 
     print(f"   Загружено: {len(H_real)} точек")
     print(f"   Высота: {H_real.min():.1f} - {H_real.max():.1f} см")
