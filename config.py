@@ -10,10 +10,11 @@ from enum import Enum
 
 
 class ObstacleType(Enum):
-    """Типы помех в цилиндре"""
+    """Типы помех в цилинре"""
     NONE = "none"
     PARALLELEPIPED = "parallelepiped"
     CYLINDER = "cylinder"
+    MULTIPLE_PARALLELEPIPEDS = "multiple_parallelepipeds"  # НОВЫЙ ТИП
 
 
 @dataclass
@@ -41,9 +42,6 @@ class ExperimentConfig:
     Ro: float = 0.035  # Параметр сглаживания
     Sg_p: int = 1  # Параметр метода сглаживания: 1 - конечные разности, 2 - сплайны
 
-
-
-
     # Параметры параллелепипеда (помеха)
     parallelepiped_height: float = 60.0  # Высота нижней грани параллелепипеда [см]
     parallelepiped_width: float = 10.0  # Ширина параллелепипеда [см]
@@ -53,6 +51,11 @@ class ExperimentConfig:
     cylinder_radius: float = 5.0  # Радиус цилиндрической помехи [см]
     cylinder_height: float = 65.0  # Высота нижней точки цилиндра [см]
     cylinder_length: float = 500.0  # Длина цилиндрической помехи [см]
+
+    # НОВЫЕ ПАРАМЕТРЫ ДЛЯ МНОГИХ ПАРАЛЛЕЛЕПИПЕДОВ
+    multiple_parallelepiped_heights: list = None  # Список высот нижних граней
+    multiple_parallelepiped_widths: list = None  # Список ширин
+    multiple_parallelepiped_lengths: list = None  # Список длин
 
     # Тип помехи (по умолчанию - без помех)
     obstacle_type: ObstacleType = ObstacleType.NONE
@@ -70,6 +73,14 @@ class ExperimentConfig:
         """
         os.makedirs('plots', exist_ok=True)  # Создание папки для графиков
 
+        # Инициализация списков для многих параллелепипедов
+        if self.multiple_parallelepiped_heights is None:
+            self.multiple_parallelepiped_heights = [30.0, 60.0, 90.0, 120.0]
+        if self.multiple_parallelepiped_widths is None:
+            self.multiple_parallelepiped_widths = [8.0, 8.0, 8.0, 8.0]
+        if self.multiple_parallelepiped_lengths is None:
+            self.multiple_parallelepiped_lengths = [500.0, 500.0, 500.0, 500.0]
+
     def print_config(self):
         """Вывод конфигурации в удобочитаемом формате"""
         print("=" * 60)
@@ -86,6 +97,10 @@ class ExperimentConfig:
             print(f"Параллелепипед: h={self.parallelepiped_height} см, w={self.parallelepiped_width} см")
         elif self.obstacle_type == ObstacleType.CYLINDER:
             print(f"Цилиндр: h={self.cylinder_height} см, r={self.cylinder_radius} см")
+        elif self.obstacle_type == ObstacleType.MULTIPLE_PARALLELEPIPEDS:
+            print(f"Количество параллелепипедов: {len(self.multiple_parallelepiped_heights)}")
+            for i, (h, w) in enumerate(zip(self.multiple_parallelepiped_heights, self.multiple_parallelepiped_widths)):
+                print(f"  Параллелепипед {i + 1}: h={h} см, w={w} см")
 
         algorithm = "ОРИГИНАЛЬНЫЙ (Pascal)" if self.use_original_smoothing else "SciPy"
         print(f"Алгоритм сглаживания: {algorithm}")

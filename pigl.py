@@ -114,7 +114,7 @@ def main():
 
         if PRE_SMOOTH_METHOD == "scipy":
             # SciPy сглаживание
-            pre_smooth_factor = 0.02
+            pre_smooth_factor = 0.01
             V_real = scipy_smooth(H_real, V_real, I_beg=0, I_end=len(H_real) - 1,
                                   smooth_factor=pre_smooth_factor)
             print(f"   Метод: SciPy, factor={pre_smooth_factor}")

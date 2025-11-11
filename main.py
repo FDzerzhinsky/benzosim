@@ -11,6 +11,7 @@ import numpy as np
 from typing import Dict, Tuple
 from bspline_new import bspline_
 
+
 def main():
     """
     Основная функция запуска экспериментов.
@@ -23,11 +24,12 @@ def main():
     experiment_objects = {}
 
     try:
-        # ВСЕ КОМБИНАЦИИ: 3 алгоритма × 3 типа помех
+        # ВСЕ КОМБИНАЦИИ: 3 алгоритма × 4 типа помех
         obstacle_types = [
             ObstacleType.NONE,
             ObstacleType.PARALLELEPIPED,
-            ObstacleType.CYLINDER
+            ObstacleType.CYLINDER,
+            ObstacleType.MULTIPLE_PARALLELEPIPEDS  # НОВЫЙ ТИП
         ]
 
         # ТРИ АЛГОРИТМА: SciPy + 2 оригинальных режима
@@ -43,7 +45,8 @@ def main():
                 obstacle_name = {
                     ObstacleType.NONE: "без помех",
                     ObstacleType.PARALLELEPIPED: "с параллелепипедом",
-                    ObstacleType.CYLINDER: "с цилиндрической помехой"
+                    ObstacleType.CYLINDER: "с цилиндрической помехой",
+                    ObstacleType.MULTIPLE_PARALLELEPIPEDS: "с 4 параллелепипедами"  # НОВОЕ НАЗВАНИЕ
                 }[obstacle_type]
 
                 experiment_name = f"{obstacle_name} - {algorithm_name}"
@@ -113,10 +116,12 @@ def _print_final_report(experiments_data: Dict):
     no_obstacle_count = len([name for name in experiments_data.keys() if "без помех" in name])
     parallelepiped_count = len([name for name in experiments_data.keys() if "параллелепипедом" in name])
     cylinder_count = len([name for name in experiments_data.keys() if "цилиндрической помехой" in name])
+    multiple_parallelepiped_count = len([name for name in experiments_data.keys() if "4 параллелепипедами" in name])
 
     print(f"Алгоритмы: оригинальный - {original_count}, SciPy - {scipy_count}")
     print(
-        f"Помехи: без помех - {no_obstacle_count}, параллелепипед - {parallelepiped_count}, цилиндр - {cylinder_count}")
+        f"Помехи: без помех - {no_obstacle_count}, параллелепипед - {parallelepiped_count}, "
+        f"цилиндр - {cylinder_count}, 4 параллелепипеда - {multiple_parallelepiped_count}")
 
     print("\nСозданные графики в папке 'plots/':")
 
@@ -140,10 +145,12 @@ def _print_final_report(experiments_data: Dict):
     print("3. Для экспорта данных в Excel: раскомментируйте код в main.py")
     print("=" * 60)
 
+
 def build():
     # Инъекция метода из основной программы
     # level, spline0, spline = bspline_(data_series['raw_cumulative'])
     pass
+
 
 if __name__ == "__main__":
     # Запуск полного набора экспериментов

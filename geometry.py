@@ -59,6 +59,18 @@ class CylinderGeometry:
             if h > ha_norm + a_norm:
                 V = V - a_norm * a_norm
 
+        elif self.config.obstacle_type == ObstacleType.MULTIPLE_PARALLELEPIPEDS:
+            # НОВЫЙ КОД ДЛЯ МНОГИХ ПАРАЛЛЕЛЕПИПЕДОВ
+            for i in range(len(self.config.multiple_parallelepiped_heights)):
+                ha_norm = self.config.multiple_parallelepiped_heights[i] / self.config.R
+                a_norm = self.config.multiple_parallelepiped_widths[i] / self.config.R
+
+                # Вычитание объема, занятого параллелепипедом
+                if (ha_norm <= h) and (h <= ha_norm + a_norm):
+                    V = V - a_norm * (h - ha_norm)
+                if h > ha_norm + a_norm:
+                    V = V - a_norm * a_norm
+
         elif self.config.obstacle_type == ObstacleType.CYLINDER:
             # Цилиндрическая помеха
             h_cyl_norm = self.config.cylinder_height / self.config.R
@@ -114,6 +126,15 @@ class CylinderGeometry:
 
             if (ha_norm <= h) and (h <= ha_norm + a_norm):
                 dV = dV - a_norm
+
+        elif self.config.obstacle_type == ObstacleType.MULTIPLE_PARALLELEPIPEDS:
+            # НОВЫЙ КОД ДЛЯ МНОГИХ ПАРАЛЛЕЛЕПИПЕДОВ
+            for i in range(len(self.config.multiple_parallelepiped_heights)):
+                ha_norm = self.config.multiple_parallelepiped_heights[i] / self.config.R
+                a_norm = self.config.multiple_parallelepiped_widths[i] / self.config.R
+
+                if (ha_norm <= h) and (h <= ha_norm + a_norm):
+                    dV = dV - a_norm
 
         elif self.config.obstacle_type == ObstacleType.CYLINDER:
             h_cyl_norm = self.config.cylinder_height / self.config.R
@@ -173,6 +194,24 @@ class CylinderGeometry:
                     self.config.R) * self.config.R * self.config.R * self.config.L / 1e3
             }
 
+        elif self.config.obstacle_type == ObstacleType.MULTIPLE_PARALLELEPIPEDS:
+            # НОВЫЙ КОД ДЛЯ МНОГИХ ПАРАЛЛЕЛЕПИПЕДОВ
+            obstacles = []
+            for i in range(len(self.config.multiple_parallelepiped_heights)):
+                height = self.config.multiple_parallelepiped_heights[i]
+                width = self.config.multiple_parallelepiped_widths[i]
+                obstacles.append({
+                    'type': 'parallelepiped',
+                    'index': i,
+                    'start_height': height,
+                    'end_height': height + width,
+                    'volume_at_start': self.V_h(height / self.config.R) *
+                                       self.config.R * self.config.R * self.config.L / 1e3,
+                    'volume_at_end': self.V_h((height + width) / self.config.R) *
+                                     self.config.R * self.config.R * self.config.L / 1e3
+                })
+            return obstacles
+
         elif self.config.obstacle_type == ObstacleType.CYLINDER:
             return {
                 'type': 'cylinder',
@@ -219,13 +258,20 @@ class CylinderGeometry:
 
         obstacle_info = self.get_obstacle_info()
         if obstacle_info:
-            print(f"Тип помехи: {obstacle_info['type']}")
-            if obstacle_info['type'] == 'parallelepiped':
-                print(f"  Высота: {obstacle_info['start_height']} см")
-                print(f"  Ширина: {obstacle_info['end_height'] - obstacle_info['start_height']} см")
-            elif obstacle_info['type'] == 'cylinder':
-                print(f"  Высота центра: {obstacle_info['start_height']} см")
-                print(f"  Радиус: {obstacle_info['radius']} см")
+            if isinstance(obstacle_info, list):  # Для многих параллелепипедов
+                print(f"Тип помехи: несколько параллелепипедов")
+                for i, obstacle in enumerate(obstacle_info):
+                    print(f"  Параллелепипед {i+1}:")
+                    print(f"    Высота: {obstacle['start_height']} см")
+                    print(f"    Ширина: {obstacle['end_height'] - obstacle['start_height']} см")
+            else:
+                print(f"Тип помехи: {obstacle_info['type']}")
+                if obstacle_info['type'] == 'parallelepiped':
+                    print(f"  Высота: {obstacle_info['start_height']} см")
+                    print(f"  Ширина: {obstacle_info['end_height'] - obstacle_info['start_height']} см")
+                elif obstacle_info['type'] == 'cylinder':
+                    print(f"  Высота центра: {obstacle_info['start_height']} см")
+                    print(f"  Радиус: {obstacle_info['radius']} см")
         else:
             print("Помехи: отсутствуют")
         print("=" * 50)

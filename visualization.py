@@ -37,6 +37,7 @@ class ExperimentVisualizer:
         Вызывает метод create_plots_according_to_pascal.
         """
         return self.create_plots_according_to_pascal(H_ideal, V_ideal, Hs, Vs, Vs_smooth, experiment_name)
+
     def create_plots_according_to_pascal(self, H_ideal: np.ndarray, V_ideal: np.ndarray,
                                          Hs: np.ndarray, Vs: np.ndarray, Vs_smooth: np.ndarray,
                                          experiment_name: str = ""):
@@ -94,12 +95,27 @@ class ExperimentVisualizer:
         # Области помех и анализа
         obstacle_info = self.results.geometry.get_obstacle_info()
         if obstacle_info:
-            if obstacle_info['type'] == 'parallelepiped':
-                plt.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
-                            alpha=0.2, color='orange', label='Область параллелепипеда')
-            elif obstacle_info['type'] == 'cylinder':
-                plt.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
-                            alpha=0.2, color='red', label='Область цилиндрической помехи')
+            # ОБРАБОТКА МНОГИХ ПАРАЛЛЕЛЕПИПЕДОВ
+            if isinstance(obstacle_info, list):
+                colors = ['orange', 'red', 'purple', 'brown', 'pink', 'gray']
+                for i, obstacle in enumerate(obstacle_info):
+                    if i < len(colors):
+                        color = colors[i]
+                    else:
+                        color = 'gray'
+
+                    if obstacle['type'] == 'parallelepiped':
+                        label = f'Параллелепипед {i + 1}'
+                        plt.axvspan(obstacle['start_height'], obstacle['end_height'],
+                                    alpha=0.2, color=color, label=label)
+            else:
+                # Обработка одиночных помех (старый код)
+                if obstacle_info['type'] == 'parallelepiped':
+                    plt.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
+                                alpha=0.2, color='orange', label='Область параллелепипеда')
+                elif obstacle_info['type'] == 'cylinder':
+                    plt.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
+                                alpha=0.2, color='red', label='Область цилиндрической помехи')
 
         # Область анализа
         plt.axvspan(H_ideal[self.results.config.I_beg], H_ideal[self.results.config.I_end],
@@ -208,7 +224,7 @@ class ExperimentVisualizer:
         errors2 = [node['error2'] for node in half_nodes]
 
         plt.plot(H_half, errors1, 'b-', linewidth=1.5, label='Ошибка без коррекции (error1)')
-        plt.plot(H_half, errors2, 'r--', linewidth=1.5, label='Ошибка с коррекцией (error2)')
+        plt.plot(H_half, errors2, 'r--', linewidth=1.5, label='Ошибка с коррекции (error2)')
         plt.axhline(y=0, color='k', linestyle='--', alpha=0.5)
 
         plt.xlabel('Высота в полуцелых узлах (см)')
@@ -271,7 +287,7 @@ class ExperimentVisualizer:
     def _create_comparison_main_curves(self, experiments_data: Dict[str, tuple], experiment_objects: Dict[str, Any]):
         """
         Сравнение основных кривых для разных экспериментов.
-        Располагает графики в матрице 3x3: строки - алгоритмы, столбцы - типы помех.
+        Располагает графики в матрице 3x4: строки - алгоритмы, столбцы - типы помех.
         """
         # Определяем порядок алгоритмов и типов помех
         algorithms_order = [
@@ -283,11 +299,12 @@ class ExperimentVisualizer:
         obstacles_order = [
             "без помех",
             "с параллелепипедом",
-            "с цилиндрической помехой"
+            "с цилиндрической помехой",
+            "с 4 параллелепипедами"  # НОВЫЙ ТИП
         ]
 
-        # Создаем фигуру 3x3
-        fig, axes = plt.subplots(3, 3, figsize=(18, 15))
+        # Создаем фигуру 3x4
+        fig, axes = plt.subplots(3, 4, figsize=(20, 15))
 
         colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
 
@@ -312,7 +329,7 @@ class ExperimentVisualizer:
 
                 if found_data is not None:
                     H_ideal, V_ideal, Hs, Vs, Vs_smooth = found_data
-                    color = colors[(row_idx * 3 + col_idx) % len(colors)]
+                    color = colors[(row_idx * 4 + col_idx) % len(colors)]
 
                     # Основные кривые
                     ax.plot(H_ideal, V_ideal, 'k-', linewidth=1, label='Идеальная V(H)')
@@ -322,16 +339,29 @@ class ExperimentVisualizer:
                     ax.axvspan(H_ideal[self.results.config.I_beg], H_ideal[self.results.config.I_end],
                                alpha=0.2, color='yellow', label='Область анализа')
 
-                    # Области помех
+                    # Области помех - ОБРАБОТКА МНОГИХ ПАРАЛЛЕЛЕПИПЕДОВ
                     if found_experiment:
                         obstacle_info = found_experiment.geometry.get_obstacle_info()
                         if obstacle_info:
-                            if obstacle_info['type'] == 'parallelepiped':
-                                ax.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
-                                           alpha=0.3, color='orange', label='Параллелепипед')
-                            elif obstacle_info['type'] == 'cylinder':
-                                ax.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
-                                           alpha=0.3, color='red', label='Цилиндрическая помеха')
+                            if isinstance(obstacle_info, list):
+                                # Много параллелепипедов
+                                obstacle_colors = ['orange', 'red', 'purple', 'brown', 'pink', 'gray']
+                                for i, obstacle_item in enumerate(obstacle_info):
+                                    if i < len(obstacle_colors):
+                                        color_obstacle = obstacle_colors[i]
+                                    else:
+                                        color_obstacle = 'gray'
+                                    ax.axvspan(obstacle_item['start_height'], obstacle_item['end_height'],
+                                               alpha=0.3, color=color_obstacle,
+                                               label=f'Параллелепипед {i + 1}')
+                            else:
+                                # Одиночные помехи
+                                if obstacle_info['type'] == 'parallelepiped':
+                                    ax.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
+                                               alpha=0.3, color='orange', label='Параллелепипед')
+                                elif obstacle_info['type'] == 'cylinder':
+                                    ax.axvspan(obstacle_info['start_height'], obstacle_info['end_height'],
+                                               alpha=0.3, color='red', label='Цилиндрическая помеха')
 
                     # Настройки графика
                     ax.set_title(f'{target_name}', fontsize=10)
