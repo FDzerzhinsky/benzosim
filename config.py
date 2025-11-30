@@ -1,12 +1,12 @@
 # config.py
 """
-Конфигурация эксперимента с параметрами из оригинального Pascal-кода.
-Добавлен параметр выбора алгоритма сглаживания.
+Хранилище готовых конфигураций экспериментов.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 from enum import Enum
+from typing import List
 
 
 class ObstacleType(Enum):
@@ -124,6 +124,11 @@ class PeriodicExperimentConfig(ExperimentConfig):
     enable_period_plotting: bool = True  # Включение визуализации периодов
     level_precision: int = 1  # Точность округления уровня (знаков после запятой)
 
+    # Параметры сглаживания и интерполяции
+    smoothing_algorithms: List[str] = field(default_factory=lambda: ['scipy', 'original_sg1', 'original_sg2'])
+    grid_step: float = 1.0  # Шаг сетки для интерполяции [см]
+    enable_smoothing_plots: bool = True  # Включение графиков сглаживания
+
 
 # =============================================================================
 # ГОТОВЫЕ КОНФИГУРАЦИИ ДЛЯ ИСПОЛЬЗОВАНИЯ
@@ -132,7 +137,7 @@ class PeriodicExperimentConfig(ExperimentConfig):
 # Основная тестовая конфигурация для периодических экспериментов
 PERIODIC_TEST_CONFIG = PeriodicExperimentConfig(
     obstacle_type=ObstacleType.NONE,
-    n_periods=12,
+    n_periods=8,
     min_drain_step=0.06,
     max_drain_step=3.0,
     period_start_min=80.0,
@@ -141,6 +146,9 @@ PERIODIC_TEST_CONFIG = PeriodicExperimentConfig(
     period_end_max=60.0,
     enable_period_plotting=True,
     level_precision=1,
+    smoothing_algorithms=['scipy', 'original_sg1', 'original_sg2'],
+    grid_step=1.0,
+    enable_smoothing_plots=True,
     name="Основной тестовый эксперимент"
 )
 
@@ -207,5 +215,8 @@ QUICK_TEST_CONFIG = PeriodicExperimentConfig(
     period_end_max=70.0,
     enable_period_plotting=True,
     level_precision=1,
+    smoothing_algorithms=['scipy'],  # Только быстрый алгоритм
+    grid_step=1.0,
+    enable_smoothing_plots=True,
     name="Быстрый тест"
 )
