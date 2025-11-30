@@ -10,11 +10,11 @@ from enum import Enum
 
 
 class ObstacleType(Enum):
-    """Типы помех в цилинре"""
+    """Типы помех в цилиндре"""
     NONE = "none"
     PARALLELEPIPED = "parallelepiped"
     CYLINDER = "cylinder"
-    MULTIPLE_PARALLELEPIPEDS = "multiple_parallelepipeds"  # НОВЫЙ ТИП
+    MULTIPLE_PARALLELEPIPEDS = "multiple_parallelepipeds"
 
 
 @dataclass
@@ -52,7 +52,7 @@ class ExperimentConfig:
     cylinder_height: float = 65.0  # Высота нижней точки цилиндра [см]
     cylinder_length: float = 500.0  # Длина цилиндрической помехи [см]
 
-    # НОВЫЕ ПАРАМЕТРЫ ДЛЯ МНОГИХ ПАРАЛЛЕЛЕПИПЕДОВ
+    # Параметры для многих параллелепипедов
     multiple_parallelepiped_heights: list = None  # Список высот нижних граней
     multiple_parallelepiped_widths: list = None  # Список ширин
     multiple_parallelepiped_lengths: list = None  # Список длин
@@ -63,8 +63,11 @@ class ExperimentConfig:
     # Параметры генерации случайных чисел
     seed: int = 42  # Seed для детерминированных случайных чисел
 
-    # НОВЫЙ ПАРАМЕТР: выбор алгоритма сглаживания
+    # Параметр: выбор алгоритма сглаживания
     use_original_smoothing: bool = False  # False = SciPy, True = оригинальный алгоритм из Pascal
+
+    # Название эксперимента
+    name: str = ""
 
     def __post_init__(self):
         """
@@ -105,3 +108,104 @@ class ExperimentConfig:
         algorithm = "ОРИГИНАЛЬНЫЙ (Pascal)" if self.use_original_smoothing else "SciPy"
         print(f"Алгоритм сглаживания: {algorithm}")
         print("=" * 60)
+
+
+@dataclass
+class PeriodicExperimentConfig(ExperimentConfig):
+    """Конфигурация периодического эксперимента"""
+    # Параметры периодов
+    n_periods: int = 5  # Количество периодов
+    min_drain_step: float = 1.0  # Минимальный шаг опустошения [см]
+    max_drain_step: float = 5.0  # Максимальный шаг опустошения [см]
+    period_start_min: float = 80.0  # Минимальный уровень начала периода [см]
+    period_start_max: float = 180.0  # Максимальный уровень начала периода [см]
+    period_end_min: float = 20.0  # Минимальный уровень окончания периода [см]
+    period_end_max: float = 60.0  # Максимальный уровень окончания периода [см]
+    enable_period_plotting: bool = True  # Включение визуализации периодов
+    level_precision: int = 1  # Точность округления уровня (знаков после запятой)
+
+
+# =============================================================================
+# ГОТОВЫЕ КОНФИГУРАЦИИ ДЛЯ ИСПОЛЬЗОВАНИЯ
+# =============================================================================
+
+# Основная тестовая конфигурация для периодических экспериментов
+PERIODIC_TEST_CONFIG = PeriodicExperimentConfig(
+    obstacle_type=ObstacleType.NONE,
+    n_periods=12,
+    min_drain_step=0.06,
+    max_drain_step=3.0,
+    period_start_min=80.0,
+    period_start_max=180.0,
+    period_end_min=20.0,
+    period_end_max=60.0,
+    enable_period_plotting=True,
+    level_precision=1,
+    name="Основной тестовый эксперимент"
+)
+
+# Конфигурации для разных типов помех
+PERIODIC_CONFIGS = {
+    "no_obstacle": PeriodicExperimentConfig(
+        obstacle_type=ObstacleType.NONE,
+        n_periods=6,
+        min_drain_step=0.05,
+        max_drain_step=2.5,
+        period_start_min=70.0,
+        period_start_max=170.0,
+        period_end_min=15.0,
+        period_end_max=50.0,
+        name="Без помех"
+    ),
+
+    "with_parallelepiped": PeriodicExperimentConfig(
+        obstacle_type=ObstacleType.PARALLELEPIPED,
+        n_periods=5,
+        min_drain_step=0.1,
+        max_drain_step=3.0,
+        period_start_min=80.0,
+        period_start_max=160.0,
+        period_end_min=25.0,
+        period_end_max=55.0,
+        name="С параллелепипедом"
+    ),
+
+    "with_cylinder": PeriodicExperimentConfig(
+        obstacle_type=ObstacleType.CYLINDER,
+        n_periods=7,
+        min_drain_step=0.08,
+        max_drain_step=2.8,
+        period_start_min=90.0,
+        period_start_max=150.0,
+        period_end_min=30.0,
+        period_end_max=60.0,
+        name="С цилиндром"
+    ),
+
+    "with_multiple_obstacles": PeriodicExperimentConfig(
+        obstacle_type=ObstacleType.MULTIPLE_PARALLELEPIPEDS,
+        n_periods=4,
+        min_drain_step=0.12,
+        max_drain_step=3.5,
+        period_start_min=60.0,
+        period_start_max=180.0,
+        period_end_min=10.0,
+        period_end_max=40.0,
+        name="С 4 параллелепипедами"
+    )
+}
+
+# Конфигурация для быстрого тестирования
+QUICK_TEST_CONFIG = PeriodicExperimentConfig(
+    obstacle_type=ObstacleType.NONE,
+    n_periods=3,
+    min_drain_step=1.0,
+    max_drain_step=5.0,
+    period_start_min=100.0,
+    period_start_max=150.0,
+    period_end_min=30.0,
+    period_end_max=70.0,
+    enable_period_plotting=True,
+    level_precision=1,
+    name="Быстрый тест"
+)

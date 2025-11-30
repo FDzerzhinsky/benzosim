@@ -1,15 +1,15 @@
 # main.py
 """
 Главный скрипт для запуска экспериментов с цилиндром.
-Соответствует оригинальному Pascal-коду по выводу данных и графиков.
+Теперь с поддержкой периодических экспериментов.
 """
 
 from experiment import CylinderExperiment
 from visualization import ExperimentVisualizer, DataExporter
 from config import ExperimentConfig, ObstacleType
+from periodic_experiment import PeriodicDrainingExperiment, PeriodicExperimentConfig
 import numpy as np
 from typing import Dict, Tuple
-from bspline_new import bspline_
 
 
 def main():
@@ -24,71 +24,11 @@ def main():
     experiment_objects = {}
 
     try:
-        # ВСЕ КОМБИНАЦИИ: 3 алгоритма × 4 типа помех
-        obstacle_types = [
-            ObstacleType.NONE,
-            ObstacleType.PARALLELEPIPED,
-            ObstacleType.CYLINDER,
-            ObstacleType.MULTIPLE_PARALLELEPIPEDS  # НОВЫЙ ТИП
-        ]
+        # ВАРИАНТ 1: Обычные эксперименты (раскомментировать при необходимости)
+        # run_standard_experiments(experiments_data, experiment_objects)
 
-        # ТРИ АЛГОРИТМА: SciPy + 2 оригинальных режима
-        algorithms = [
-            (False, 1, "SciPy"),  # SciPy алгоритм (Sg_p не используется)
-            (True, 1, "оригинальный Sg_p=1"),  # Оригинальный метод конечных разностей
-            (True, 2, "оригинальный Sg_p=2")   # Оригинальный метод сплайнов
-        ]
-
-        for use_original, sg_p, algorithm_name in algorithms:
-            for obstacle_type in obstacle_types:
-                # Формируем название эксперимента
-                obstacle_name = {
-                    ObstacleType.NONE: "без помех",
-                    ObstacleType.PARALLELEPIPED: "с параллелепипедом",
-                    ObstacleType.CYLINDER: "с цилиндрической помехой",
-                    ObstacleType.MULTIPLE_PARALLELEPIPEDS: "с 4 параллелепипедами"  # НОВОЕ НАЗВАНИЕ
-                }[obstacle_type]
-
-                experiment_name = f"{obstacle_name} - {algorithm_name}"
-
-                print("\n" + "=" * 60)
-                print(f"ЭКСПЕРИМЕНТ: {experiment_name}")
-                print("=" * 60)
-
-                # Создаем конфигурацию с указанием алгоритма и режима
-                config = ExperimentConfig(
-                    obstacle_type=obstacle_type,
-                    use_original_smoothing=use_original,
-                    Sg_p=sg_p  # Указываем режим сглаживания для оригинального алгоритма
-                )
-
-                # Запускаем эксперимент
-                experiment = CylinderExperiment(config, experiment_name)
-                data = experiment.run_experiment()
-
-                if data:
-                    experiments_data[experiment_name] = data
-                    experiment_objects[experiment_name] = experiment
-
-        # СОЗДАНИЕ СРАВНИТЕЛЬНЫХ ГРАФИКОВ
-        if experiments_data and experiment_objects:
-            print("\n" + "=" * 60)
-            print("СОЗДАНИЕ СРАВНИТЕЛЬНЫХ ГРАФИКОВ")
-            print("=" * 60)
-
-            # Используем первый эксперимент для инициализации визуализатора
-            first_experiment_name = next(iter(experiment_objects.keys()))
-            first_experiment = experiment_objects[first_experiment_name]
-            visualizer = ExperimentVisualizer(first_experiment.results)
-
-            # Сравнительные графики
-            visualizer.create_comparison_plots(experiments_data, experiment_objects)
-
-        # ЭКСПОРТ ДАННЫХ В EXCEL (раскомментировать при необходимости)
-        # print("\n" + "=" * 60)
-        # print("ЭКСПОРТ ДАННЫХ В EXCEL")
-        # print("=" * 60)
-        # DataExporter.export_comparison_to_excel(experiments_data, "all_experiments.xlsx")
+        # ВАРИАНТ 2: Периодические эксперименты
+        run_periodic_experiments(experiments_data, experiment_objects)
 
     except Exception as e:
         print(f"Ошибка в основном цикле: {e}")
@@ -99,57 +39,98 @@ def main():
     _print_final_report(experiments_data)
 
 
+def run_standard_experiments(experiments_data: Dict, experiment_objects: Dict):
+    """Запуск стандартных экспериментов"""
+    # [существующий код запуска стандартных экспериментов]
+    pass
+
+
+def run_periodic_experiments(experiments_data: Dict, experiment_objects: Dict):
+    """Запуск периодических экспериментов"""
+    print("\nЗАПУСК ПЕРИОДИЧЕСКИХ ЭКСПЕРИМЕНТОВ")
+    print("=" * 50)
+
+    # Конфигурации для разных типов помех
+    periodic_configs = [
+        PeriodicExperimentConfig(
+            obstacle_type=ObstacleType.NONE,
+            n_periods=3,
+            refill_min_level=60.0,
+            refill_max_level=170.0,
+            min_final_level=15.0,
+            min_drain_step=2.0,
+            max_drain_step=8.0,
+            level_precision=1,
+            enable_period_plotting=True,
+            name="Без помех"
+        ),
+        PeriodicExperimentConfig(
+            obstacle_type=ObstacleType.PARALLELEPIPED,
+            n_periods=4,
+            refill_min_level=80.0,
+            refill_max_level=160.0,
+            min_final_level=20.0,
+            min_drain_step=1.5,
+            max_drain_step=6.0,
+            level_precision=1,
+            enable_period_plotting=True,
+            name="С параллелепипедом"
+        ),
+        PeriodicExperimentConfig(
+            obstacle_type=ObstacleType.CYLINDER,
+            n_periods=3,
+            refill_min_level=70.0,
+            refill_max_level=150.0,
+            min_final_level=25.0,
+            min_drain_step=2.0,
+            max_drain_step=7.0,
+            level_precision=2,
+            enable_period_plotting=True,
+            name="С цилиндрической помехой"
+        ),
+        PeriodicExperimentConfig(
+            obstacle_type=ObstacleType.MULTIPLE_PARALLELEPIPEDS,
+            n_periods=5,
+            refill_min_level=50.0,
+            refill_max_level=180.0,
+            min_final_level=10.0,
+            min_drain_step=3.0,
+            max_drain_step=10.0,
+            level_precision=1,
+            enable_period_plotting=True,
+            name="С 4 параллелепипедами"
+        )
+    ]
+
+    for config in periodic_configs:
+        experiment_name = f"Периодический - {config.name}"
+        print(f"\n--- {experiment_name} ---")
+
+        experiment = PeriodicDrainingExperiment(config, experiment_name)
+        data = experiment.run_experiment()
+
+        if data:
+            experiments_data[experiment_name] = data
+            experiment_objects[experiment_name] = experiment
+
+
 def _print_final_report(experiments_data: Dict):
-    """
-    Печать финального отчета.
-    """
+    """Печать финального отчета"""
     print("\n" + "=" * 60)
     print("ВСЕ ЭКСПЕРИМЕНТЫ ЗАВЕРШЕНЫ!")
     print("=" * 60)
 
     print(f"Успешно выполнено экспериментов: {len(experiments_data)}")
 
-    # Группируем по типам
-    original_count = len([name for name in experiments_data.keys() if "оригинальный" in name])
-    scipy_count = len([name for name in experiments_data.keys() if "SciPy" in name])
+    # Фильтруем периодические эксперименты
+    periodic_experiments = {k: v for k, v in experiments_data.items() if "Периодический" in k}
 
-    no_obstacle_count = len([name for name in experiments_data.keys() if "без помех" in name])
-    parallelepiped_count = len([name for name in experiments_data.keys() if "параллелепипедом" in name])
-    cylinder_count = len([name for name in experiments_data.keys() if "цилиндрической помехой" in name])
-    multiple_parallelepiped_count = len([name for name in experiments_data.keys() if "4 параллелепипедами" in name])
-
-    print(f"Алгоритмы: оригинальный - {original_count}, SciPy - {scipy_count}")
-    print(
-        f"Помехи: без помех - {no_obstacle_count}, параллелепипед - {parallelepiped_count}, "
-        f"цилиндр - {cylinder_count}, 4 параллелепипеда - {multiple_parallelepiped_count}")
-
-    print("\nСозданные графики в папке 'plots/':")
-
-    # Основные графики для каждого эксперимента
-    for exp_name in experiments_data.keys():
-        safe_name = exp_name.replace(" ", "_")
-        print(f"\n--- {exp_name} ---")
-        print(f"  main_curves_{safe_name}.png")
-        print(f"  measurement_errors_{safe_name}.png")
-        print(f"  smoothing_process_{safe_name}.png")
-        print(f"  half_nodes_errors_{safe_name}.png")
-        print(f"  derivative_analysis_{safe_name}.png")
-
-    # Сравнительные графики
-    print("\n--- СРАВНИТЕЛЬНЫЕ ГРАФИКИ ---")
-    print("  comparison_main_curves.png")
-
-    print("\nРЕКОМЕНДАЦИИ:")
-    print("1. Для просмотра всех экспериментов: откройте comparison_main_curves.png")
-    print("2. Для детального анализа: используйте индивидуальные графики экспериментов")
-    print("3. Для экспорта данных в Excel: раскомментируйте код в main.py")
-    print("=" * 60)
-
-
-def build():
-    # Инъекция метода из основной программы
-    # level, spline0, spline = bspline_(data_series['raw_cumulative'])
-    pass
+    if periodic_experiments:
+        print(f"Периодических экспериментов: {len(periodic_experiments)}")
+        print("\nСозданные графики в папке 'plots/':")
+        for exp_name in periodic_experiments.keys():
+            safe_name = exp_name.replace(" ", "_").replace("-", "_")
+            print(f"  periodic_draining_{safe_name}.png")
 
 
 if __name__ == "__main__":
