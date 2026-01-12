@@ -8,6 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from typing import Dict, List, Tuple, Any
+
+import pandas as pd
 from scipy.interpolate import CubicSpline
 import warnings
 
@@ -30,6 +32,7 @@ class PeriodicDrainingExperiment(CylinderExperiment):
         self.smoothed_data = {}  # Данные после сглаживания
         self.interpolated_data = {}  # Данные после интерполяции
         self.combined_characteristics = {}  # Объединенные характеристики
+        self.combined_Pandas = {}  # Объединенные характеристики в формате Pandas
         self.rng = np.random.RandomState(config.seed)
         self.global_step_counter = 0  # Сквозной счётчик шагов
 
@@ -367,6 +370,8 @@ class PeriodicDrainingExperiment(CylinderExperiment):
 
         for algorithm in self.periodic_config.smoothing_algorithms:
             print(f"  Алгоритм: {algorithm}")
+            self.combined_Pandas[algorithm] = pd.DataFrame()
+
 
             # Создаем словарь для хранения объемов по высотам
             height_volumes = {}
@@ -410,6 +415,7 @@ class PeriodicDrainingExperiment(CylinderExperiment):
                 'V': V_combined,
                 'periods_count': len(height_volumes)
             }
+            # self.combined_Pandas[algorithm][interpolated_period]
 
             print(f"    Создана характеристика с {len(H_combined)} точками")
 
