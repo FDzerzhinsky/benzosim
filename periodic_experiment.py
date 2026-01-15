@@ -564,8 +564,8 @@ class PeriodicDrainingExperiment(CylinderExperiment):
             V_smoothed_stronger = V_raw.copy()
             stronger_factor = getattr(self.periodic_config, 'combined_smooth_factor', None)
             if stronger_factor is None:
-                # значение по умолчанию для сильного сглаживания
-                stronger_factor = 1.0
+                # значение по умолчанию для сильного сглаживания (увеличено на два порядка)
+                stronger_factor = 100.0
 
             if H_combined.size >= 2:
                 try:
