@@ -16,7 +16,7 @@ import warnings
 from experiment import CylinderExperiment
 from config import PeriodicExperimentConfig
 from geometry import CylinderGeometry
-from utils import OriginalSmoother, scipy_smooth, SafeOriginalSmoother
+from utils import OriginalSmoother, scipy_smooth, SafeOriginalSmoother, calculate_derivative
 
 
 class PeriodicDrainingExperiment(CylinderExperiment):
@@ -80,6 +80,11 @@ class PeriodicDrainingExperiment(CylinderExperiment):
             # 5. Сглаживание данных
             print(f"\nСГЛАЖИВАНИЕ ДАННЫХ...")
             self.smooth_periods_data()
+            # Визуализация сглаженных кривых ДО интерполяции/экстраполяции (только периоды)
+            try:
+                self.visualize_periods_before_extrapolation()
+            except Exception as e:
+                print(f"Ошибка при visualizing periods before extrapolation: {e}")
 
             # 6. Интерполяция на сетку
             print(f"\nИНТЕРПОЛЯЦИЯ НА СЕТКУ...")
@@ -88,6 +93,16 @@ class PeriodicDrainingExperiment(CylinderExperiment):
             # 7. Создание объединенной характеристики
             print(f"\nСОЗДАНИЕ ОБЪЕДИНЕННОЙ ХАРАКТЕРИСТИКИ...")
             self.create_combined_characteristics()
+            # Сохранить сравнение объединённой характеристики с точной геометрией
+            try:
+                self.visualize_combined_vs_geometry()
+            except Exception as e:
+                print(f"Ошибка при visualizing combined vs geometry: {e}")
+            # Визуализация производных для объединённых и периодных характеристик
+            try:
+                self.visualize_derivatives_all()
+            except Exception as e:
+                print(f"Ошибка при visualizing derivatives: {e}")
 
             # 8. Визуализация сглаженных данных (если включено)
             if self.periodic_config.enable_smoothing_plots:
@@ -245,19 +260,66 @@ class PeriodicDrainingExperiment(CylinderExperiment):
                 H_ascending = H_measured[::-1].copy()  # Делаем возрастающим
                 V_ascending = V_measured[::-1].copy()
 
-                # Применяем выбранный алгоритм сглаживания
-                V_smooth_ascending = self.apply_smoothing_algorithm(algorithm, H_ascending, V_ascending)
+                # Удаляем дубликаты по высоте (они мешают сглаживанию и вызывают деление на ноль).
+                # Для одинаковых H усредняем соответствующие V.
+                if len(H_ascending) > 0:
+                    uniq_H = []
+                    uniq_V = []
+                    i = 0
+                    n = len(H_ascending)
+                    while i < n:
+                        h_val = H_ascending[i]
+                        j = i + 1
+                        # поскольку H_ascending отсортирован, дубликаты будут рядом
+                        while j < n and np.isclose(H_ascending[j], h_val):
+                            j += 1
+                        # усредняем V на интервале [i, j)
+                        mean_v = float(np.mean(V_ascending[i:j]))
+                        uniq_H.append(h_val)
+                        uniq_V.append(mean_v)
+                        i = j
+                    H_ascending_unique = np.array(uniq_H)
+                    V_ascending_unique = np.array(uniq_V)
+                else:
+                    H_ascending_unique = H_ascending
+                    V_ascending_unique = V_ascending
 
-                # Разворачиваем обратно
+                # Применяем выбранный алгоритм сглаживания
+                # Если после удаления дублей осталось мало точек, сглаживание бессмысленно — возвращаем исходные значения
+                if len(H_ascending_unique) < 2:
+                    V_smooth_ascending = V_ascending_unique.copy()
+                else:
+                    V_smooth_ascending = self.apply_smoothing_algorithm(algorithm, H_ascending_unique, V_ascending_unique)
+
+                # Очистка NaN/inf в результате сглаживания: интерполируем по валидным точкам
+                try:
+                    V_arr = np.array(V_smooth_ascending, dtype=float)
+                    finite_mask = np.isfinite(V_arr)
+                    if not np.all(finite_mask):
+                        valid_idx = np.where(finite_mask)[0]
+                        if valid_idx.size >= 2:
+                            # линейная интерполяция по уникальным H
+                            V_filled = np.interp(H_ascending_unique, H_ascending_unique[valid_idx], V_arr[valid_idx])
+                        elif valid_idx.size == 1:
+                            V_filled = np.full_like(V_arr, V_arr[valid_idx[0]], dtype=float)
+                        else:
+                            # нет валидных значений, возвращаем исходные измеренные
+                            V_filled = np.array(V_ascending_unique, dtype=float)
+                        V_smooth_ascending = V_filled
+                except Exception:
+                    # Если что-то пошло не так, оставляем исходные значения
+                    V_smooth_ascending = V_ascending_unique.copy()
+
+                # Разворачиваем обратно (это сглаженные значения, соответствующие уникальным H)
                 V_smooth = V_smooth_ascending[::-1]
 
-                # Сохраняем сглаженные данные
+                # Сохраняем сглаженные данные (используем уникальные возрастающие точки для интерполяции)
                 smoothed_period = {
                     'period_id': period['period_id'],
                     'H_measured': H_measured,
                     'V_measured': V_measured,
                     'V_smooth': V_smooth,
-                    'H_ascending': H_ascending,
+                    'H_ascending': H_ascending_unique,
                     'V_smooth_ascending': V_smooth_ascending
                 }
 
@@ -325,23 +387,84 @@ class PeriodicDrainingExperiment(CylinderExperiment):
                 # Создаем равномерную сетку (возрастающую)
                 H_min = np.min(H_ascending)
                 H_max = np.max(H_ascending)
-                H_grid_ascending = np.arange(H_min, H_max + grid_step, grid_step)
+                # Расширяем сетку на один узел сверху и снизу (в пределах [0, 2R]) -- чтобы не потерять граничные значения
+                H_min_ext = max(0.0, H_min - grid_step)
+                H_max_ext = min(2.0 * self.geometry.config.R, H_max + grid_step)
+                H_grid_ascending = np.arange(H_min_ext, H_max_ext + grid_step, grid_step)
 
                 # Интерполяция на сетку
+                # Безопасная линейная интерполяция: используем только валидные (finite) значения
                 try:
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        # Убедимся, что данные строго возрастают
-                        if len(np.unique(H_ascending)) == len(H_ascending):
-                            spline = CubicSpline(H_ascending, V_smooth_ascending)
-                            V_grid_ascending = spline(H_grid_ascending)
+                    V_arr = np.array(V_smooth_ascending, dtype=float)
+                    H_arr = np.array(H_ascending, dtype=float)
+                    finite_mask = np.isfinite(V_arr)
+                    # Если у нас нет валидных точек — используем V_arr (возможно все NaN) или пропускаем
+                    if np.sum(finite_mask) == 0:
+                        # ничего валидного — заполним нулями или оставим NaN
+                        V_grid_ascending = np.full_like(H_grid_ascending, np.nan, dtype=float)
+                    elif np.sum(finite_mask) == 1:
+                        # одна точка — заполним константой
+                        val = float(V_arr[finite_mask][0])
+                        V_grid_ascending = np.full_like(H_grid_ascending, val, dtype=float)
+                    else:
+                        # Линейная интерполяция внутри диапазона и линейная экстраполяция на краях
+                        H_valid = H_arr[finite_mask]
+                        V_valid = V_arr[finite_mask]
+                        # Убедимся, что H_valid возрастающий
+                        sort_idx = np.argsort(H_valid)
+                        H_valid = H_valid[sort_idx]
+                        V_valid = V_valid[sort_idx]
+
+                        # Если валидных точек одна — заполняем константой
+                        if H_valid.size == 1:
+                            V_grid_ascending = np.full_like(H_grid_ascending, float(V_valid[0]), dtype=float)
                         else:
-                            # Если есть дубликаты, используем линейную интерполяцию
-                            V_grid_ascending = np.interp(H_grid_ascending, H_ascending, V_smooth_ascending)
+                            # Интерполяция внутри диапазона
+                            V_interp = np.interp(H_grid_ascending, H_valid, V_valid)
+
+                            # Линейная экстраполяция по последним/первым n точкам
+                            n_for_extrap = 3
+                            # нижняя сторона
+                            if H_valid.size >= 2:
+                                n_low = min(n_for_extrap, H_valid.size)
+                                # используем первые n_low точек для оценки наклона
+                                idx_low_start = 0
+                                idx_low_end = n_low - 1
+                                denom_low = (H_valid[idx_low_end] - H_valid[idx_low_start])
+                                if abs(denom_low) > 1e-12:
+                                    slope_low = (V_valid[idx_low_end] - V_valid[idx_low_start]) / denom_low
+                                else:
+                                    slope_low = 0.0
+                            else:
+                                slope_low = 0.0
+
+                            # верхняя сторона
+                            if H_valid.size >= 2:
+                                n_high = min(n_for_extrap, H_valid.size)
+                                idx_high_start = -n_high
+                                idx_high_end = -1
+                                denom_high = (H_valid[idx_high_end] - H_valid[idx_high_start])
+                                if abs(denom_high) > 1e-12:
+                                    slope_high = (V_valid[idx_high_end] - V_valid[idx_high_start]) / denom_high
+                                else:
+                                    slope_high = 0.0
+                            else:
+                                slope_high = 0.0
+
+                            V_grid_ascending = V_interp.copy()
+
+                            # обработка точек слева от H_valid[0]
+                            left_mask = H_grid_ascending < H_valid[0]
+                            if np.any(left_mask):
+                                V_grid_ascending[left_mask] = V_valid[0] + slope_low * (H_grid_ascending[left_mask] - H_valid[0])
+
+                            # обработка точек справа от H_valid[-1]
+                            right_mask = H_grid_ascending > H_valid[-1]
+                            if np.any(right_mask):
+                                V_grid_ascending[right_mask] = V_valid[-1] + slope_high * (H_grid_ascending[right_mask] - H_valid[-1])
                 except Exception as e:
-                    print(f"    Ошибка интерполяции для периода {smoothed_period['period_id']}: {e}")
-                    # Линейная интерполяция как запасной вариант
-                    V_grid_ascending = np.interp(H_grid_ascending, H_ascending, V_smooth_ascending)
+                    print(f"    Ошибка безопасной интерполяции для периода {smoothed_period.get('period_id', '?')}: {e}")
+                    V_grid_ascending = np.full_like(H_grid_ascending, np.nan, dtype=float)
 
                 # Разворачиваем обратно для согласованности с исходными данными
                 H_grid = H_grid_ascending[::-1]
@@ -373,37 +496,80 @@ class PeriodicDrainingExperiment(CylinderExperiment):
             self.combined_Pandas[algorithm] = pd.DataFrame()
 
 
-            # Создаем словарь для хранения объемов по высотам
+            # Создаем словарь для хранения объемов по высотам, привязанный к сетке grid_step
+            # Ключ — узел сетки (в см), значение — список записей (V, period_id)
             height_volumes = {}
 
             # Собираем все объемы для каждой высоты из всех периодов
+            dropped_total = 0
+            per_period_dropped: Dict[int, int] = {}
             for interpolated_period in self.interpolated_data[algorithm]:
                 H_grid = interpolated_period['H_grid']
                 V_grid = interpolated_period['V_grid']
+                period_id = interpolated_period.get('period_id', None)
+                per_period_dropped[period_id] = 0
 
                 for h, v in zip(H_grid, V_grid):
-                    # Округляем высоту до сетки
-                    h_rounded = self.round_level(h)
+                    # Пропускаем нечисловые значения
+                    try:
+                        v_f = float(v)
+                    except Exception:
+                        per_period_dropped[period_id] += 1
+                        dropped_total += 1
+                        continue
+                    if not np.isfinite(v_f):
+                        per_period_dropped[period_id] += 1
+                        dropped_total += 1
+                        continue
 
-                    if h_rounded not in height_volumes:
-                        height_volumes[h_rounded] = []
+                    # Привязка узла к сетке через индекс: избегаем ошибок округления FP
+                    h_index = int(round(float(h) / grid_step))
+                    h_key = float(h_index * grid_step)
 
-                    height_volumes[h_rounded].append(v)
+                    if h_key not in height_volumes:
+                        height_volumes[h_key] = []
 
-            # Создаем массивы для объединенной характеристики
+                    # Если для этого узла уже есть значение от того же period_id — пропускаем последующие
+                    # Храним кортеж (V, period_id) — позже усредним только V
+                    if not any((rec[1] == period_id) for rec in height_volumes[h_key]):
+                        height_volumes[h_key].append((v_f, period_id))
+
+            # Диагностический дамп: все записи до агрегации (node_cm, V, period_id)
+            try:
+                dump_dir = os.path.join('plots', self.plot_subdir)
+                os.makedirs(dump_dir, exist_ok=True)
+                dump_path = os.path.join(dump_dir, f'cloud_before_agg_{algorithm}.csv')
+                with open(dump_path, 'w', newline='', encoding='utf-8') as f:
+                    import csv
+                    w = csv.writer(f)
+                    w.writerow(['node_cm', 'V', 'period_id'])
+                    for node in sorted(height_volumes.keys()):
+                        for rec in height_volumes[node]:
+                            v_val = rec[0] if isinstance(rec, (list, tuple)) else rec
+                            pid = rec[1] if isinstance(rec, (list, tuple)) and len(rec) > 1 else ''
+                            w.writerow([node, float(v_val), pid])
+                print(f"    Диагностический дамп облака сохранён: {dump_path}")
+            except Exception as e:
+                print(f"    Ошибка при сохранении дампа облака: {e}")
+
+            # Создаем массивы для объединенной характеристики: берем все узлы, где есть хотя бы одна запись
             H_combined = []
             V_combined = []
 
-            # Проходим по общей сетке высот
-            for h in H_common:
-                h_rounded = self.round_level(h)
+            # Проходим по отсортированным узлам (в пределах общей сетки H_common)
+            for h_key in sorted(height_volumes.keys()):
+                # Опционально фильтруем узлы вне общей сетки (на случай интерполяционных краёв)
+                if h_key < np.min(H_common) - 1e-8 or h_key > np.max(H_common) + 1e-8:
+                    continue
 
-                if h_rounded in height_volumes:
-                    volumes = height_volumes[h_rounded]
-                    # Усредняем объемы по всем периодам
-                    avg_volume = np.mean(volumes)
-                    H_combined.append(h_rounded)
-                    V_combined.append(avg_volume)
+                recs = height_volumes[h_key]
+                # берем только первые элементы кортежей — объемы
+                vols = [rec[0] if isinstance(rec, (list, tuple)) else rec for rec in recs]
+                if len(vols) == 0:
+                    continue
+                avg_volume = float(np.mean(vols))
+                H_combined.append(h_key)
+                V_combined.append(avg_volume)
 
             # Преобразуем в numpy массивы
             H_combined = np.array(H_combined)
@@ -415,9 +581,159 @@ class PeriodicDrainingExperiment(CylinderExperiment):
                 'V': V_combined,
                 'periods_count': len(height_volumes)
             }
-            # self.combined_Pandas[algorithm][interpolated_period]
 
-            print(f"    Создана характеристика с {len(H_combined)} точками")
+            # Дополнительно сохраняем объединённую характеристику и counts в CSV для удобного анализа
+            try:
+                combined_path = os.path.join('plots', self.plot_subdir, f'combined_{algorithm}.csv')
+                with open(combined_path, 'w', newline='', encoding='utf-8') as f2:
+                    import csv
+                    ww = csv.writer(f2)
+                    ww.writerow(['H_cm', 'V_l'])
+                    for hh, vv in zip(H_combined, V_combined):
+                        ww.writerow([hh, vv])
+                counts_path = os.path.join('plots', self.plot_subdir, f'counts_{algorithm}.csv')
+                with open(counts_path, 'w', newline='', encoding='utf-8') as f3:
+                    import csv
+                    ww = csv.writer(f3)
+                    ww.writerow(['node_cm', 'count'])
+                    for node in sorted(height_volumes.keys()):
+                        ww.writerow([node, len(height_volumes[node])])
+                print(f"    Сохранены combined CSV: {combined_path} и counts CSV: {counts_path}")
+            except Exception as e:
+                print(f"    Не удалось сохранить combined/counts CSV: {e}")
+
+        # Диагностический вывод глобального min/max высот
+        for algorithm in self.periodic_config.smoothing_algorithms:
+            if algorithm in self.combined_characteristics:
+                combined_data = self.combined_characteristics[algorithm]
+                H_min_global = np.min(combined_data['H'])
+                H_max_global = np.max(combined_data['H'])
+                print(f"  Алгоритм {algorithm}: глобальный min/max высот = {H_min_global:.2f} см / {H_max_global:.2f} см")
+
+    def visualize_combined_characteristics(self):
+        """Сравнение разных алгоритмов сглаживания для объединенной характеристики"""
+        if len(self.combined_characteristics) == 0:
+            return
+
+        plt.figure(figsize=(12, 8))
+
+        # Цвета для алгоритмов
+        algorithm_colors = {
+            'scipy': 'red',
+            'original_sg1': 'blue',
+            'original_sg2': 'green'
+        }
+
+        # Рисуем объединенные характеристики для каждого алгоритма
+        for algorithm in self.periodic_config.smoothing_algorithms:
+            if algorithm in self.combined_characteristics:
+                combined_data = self.combined_characteristics[algorithm]
+
+                algorithm_names = {
+                    'scipy': 'SciPy',
+                    'original_sg1': 'Оригинальный Sg_p=1',
+                    'original_sg2': 'Оригинальный Sg_p=2'
+                }
+
+                # безопасно получаем количество точек
+                n_points = len(combined_data['H']) if (combined_data.get('H') is not None) else 0
+                markevery_val = max(1, n_points // 20) if n_points > 0 else 1
+                plt.plot(combined_data['H'], combined_data['V'],
+                         color=algorithm_colors.get(algorithm, 'black'),
+                         linewidth=2,
+                         label=f'{algorithm_names.get(algorithm, algorithm)} ({combined_data["periods_count"]} периодов)',
+                         linestyle='--',
+                         marker='o',
+                         markersize=4,
+                         markevery=markevery_val)
+
+        plt.xlabel('Уровень жидкости, см', fontsize=12)
+        plt.ylabel('Объем, л', fontsize=12)
+        plt.title(f'Сравнение объединенных характеристик\n{self.name}', fontsize=14)
+        plt.legend(fontsize=10)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+
+        # Сохранение графика
+        filename = f'algorithms_comparison_period1.png'
+        filepath = f'plots/{self.plot_subdir}/{filename}'
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.show()
+
+        print(f"   График сравнения алгоритмов сохранен: {filepath}")
+
+    def visualize_combined_vs_geometry(self):
+        """Сравнение объединённой характеристики и точной геометрической градуировки для каждого алгоритма.
+        Сохраняет по одному PNG на алгоритм в папке эксперимента.
+        """
+        if len(self.combined_characteristics) == 0:
+            return
+
+        # Получаем идеальную геометрическую кривую
+        H_geom_full, V_geom_full = self.geometry.calculate_ideal_curve()
+
+        algorithm_names = {
+            'scipy': 'SciPy',
+            'original_sg1': 'Оригинальный Sg_p=1',
+            'original_sg2': 'Оригинальный Sg_p=2'
+        }
+
+        for algorithm, combined in self.combined_characteristics.items():
+            Hc = combined.get('H', np.array([]))
+            Vc = combined.get('V', np.array([]))
+
+            # Если есть объединённая характеристика, обрезаем идеальную кривую по её min/max
+            if Hc.size > 0:
+                h_min = float(np.min(Hc))
+                h_max = float(np.max(Hc))
+                mask = (H_geom_full >= h_min - 1e-8) & (H_geom_full <= h_max + 1e-8)
+                if np.any(mask):
+                    H_geom = H_geom_full[mask]
+                    V_geom = V_geom_full[mask]
+                else:
+                    H_geom = H_geom_full
+                    V_geom = V_geom_full
+            else:
+                H_geom = H_geom_full
+                V_geom = V_geom_full
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+
+            # ПИГЛ — зелёная линия (без маркеров)
+            ax.plot(H_geom, V_geom, color='green', linewidth=1.5, alpha=0.9, label='ПИГЛ')
+
+            # Алгоритм — красная пунктирная линия (без маркеров), сохраняем пунктирность и прозрачность
+            if Hc.size > 0:
+                ax.plot(Hc, Vc, color='red', linestyle='--', linewidth=1.2, alpha=0.9,
+                        label=algorithm_names.get(algorithm, algorithm))
+
+            # Заголовки и подписи
+            fig.suptitle('Зависимость объёма от уровня', fontsize=14)
+            ax.set_title(f'fСравнение ПИГЛ - {algorithm_names.get(algorithm, algorithm)}', fontsize=12)
+            ax.set_xlabel('H, см', fontsize=12)
+            ax.set_ylabel('V, л', fontsize=12)
+
+            # Легенда
+            ax.legend(fontsize=10)
+
+            # Основная сетка (более заметная)
+            ax.grid(which='major', linestyle='-', linewidth=0.8, alpha=0.6)
+            # Включаем минорные деления и рисуем пунктирную сантиметровую сетку (без подписей)
+            try:
+                ax.minorticks_on()
+                ax.grid(which='minor', linestyle=':', linewidth=0.6, alpha=0.3)
+            except Exception:
+                # Если по какой-то причине minor ticks не поддержаны — игнорируем
+                pass
+
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+            filename = f'combined_vs_geometry_{algorithm}.png'
+            filepath = f'plots/{self.plot_subdir}/{filename}'
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+
+            print(f"   Сохранён график сравнения combined vs geometry: {filepath}")
 
     def visualize_periods(self):
         """Визуализация уровней от глобального шага"""
@@ -492,18 +808,31 @@ class PeriodicDrainingExperiment(CylinderExperiment):
                 H_grid = interpolated_period['H_grid']
                 V_grid = interpolated_period['V_grid']
 
+                # Делаем линии периодов непрозрачными и добавляем их в легенду
                 ax.plot(H_grid, V_grid,
                         color=colors[i],
                         linewidth=1,
-                        alpha=0.3)  # Полупрозрачные линии периодов
+                        alpha=1.0,
+                        label=f'Период {i + 1}')
 
             # Рисуем объединенную характеристику (жирная линия)
             if algorithm in self.combined_characteristics:
                 combined_data = self.combined_characteristics[algorithm]
+                # Рассчитываем параметр markevery в зависимости от числа точек, чтобы маркеров было не слишком много
+                # безопасно получаем количество точек
+                n_points = len(combined_data['H']) if (combined_data.get('H') is not None) else 0
+                markevery_val = max(1, n_points // 20) if n_points > 0 else 1
                 ax.plot(combined_data['H'], combined_data['V'],
                         color='black',
-                        linewidth=3,
-                        label='Объединенная характеристика')
+                        linewidth=1,
+                        alpha=1.0,
+                        label='Объединенная характеристика',
+                        linestyle='--',
+                        marker='o',
+                        markersize=4,
+                        markerfacecolor='black',
+                        markeredgecolor='black',
+                        markevery=markevery_val)
 
             # Настройки графика
             algorithm_names = {
@@ -531,50 +860,119 @@ class PeriodicDrainingExperiment(CylinderExperiment):
         # Дополнительный график: сравнение всех алгоритмов для объединенной характеристики
         self.visualize_combined_characteristics()
 
-    def visualize_combined_characteristics(self):
-        """Сравнение разных алгоритмов сглаживания для объединенной характеристики"""
-        if len(self.combined_characteristics) == 0:
+    def visualize_periods_before_extrapolation(self):
+        """Сохраняет график сглаженных кривых каждого периода на их исходных узлах (до интерполяции/экстраполяции).
+        В файле не рисуются объединённые характеристики и не используется H_grid/V_grid.
+        """
+        if not self.smoothed_data:
             return
 
-        plt.figure(figsize=(12, 8))
+        n_algorithms = len(self.periodic_config.smoothing_algorithms)
+        fig, axes = plt.subplots(1, n_algorithms, figsize=(6 * n_algorithms, 6))
+        if n_algorithms == 1:
+            axes = [axes]
 
-        # Цвета для алгоритмов
-        algorithm_colors = {
-            'scipy': 'red',
-            'original_sg1': 'blue',
-            'original_sg2': 'green'
-        }
+        colors = plt.cm.tab10(np.linspace(0, 1, max(10, len(self.periods_data))))
 
-        # Рисуем объединенные характеристики для каждого алгоритма
-        for algorithm in self.periodic_config.smoothing_algorithms:
-            if algorithm in self.combined_characteristics:
-                combined_data = self.combined_characteristics[algorithm]
+        for idx, algorithm in enumerate(self.periodic_config.smoothing_algorithms):
+            ax = axes[idx]
+            ax.set_title(f'{algorithm} — {self.name}', fontsize=12)
 
-                algorithm_names = {
-                    'scipy': 'SciPy',
-                    'original_sg1': 'Оригинальный Sg_p=1',
-                    'original_sg2': 'Оригинальный Sg_p=2'
-                }
+            # Рисуем сглаженные кривые каждого периода на их исходных уникальных узлах
+            for i, smoothed_period in enumerate(self.smoothed_data.get(algorithm, [])):
+                H_asc = smoothed_period.get('H_ascending', np.array([]))
+                V_smooth_asc = smoothed_period.get('V_smooth_ascending', np.array([]))
+                if H_asc is None or V_smooth_asc is None:
+                    continue
+                H_arr = np.array(H_asc, dtype=float)
+                V_arr = np.array(V_smooth_asc, dtype=float)
+                if H_arr.size == 0 or V_arr.size == 0:
+                    continue
+                # Рисуем непрозрачные линии периодов и добавляем подпись
+                ax.plot(H_arr, V_arr, color=colors[i % len(colors)], linewidth=1.5, alpha=1.0, label=f'Период {i+1}')
 
-                plt.plot(combined_data['H'], combined_data['V'],
-                         color=algorithm_colors.get(algorithm, 'black'),
-                         linewidth=2,
-                         label=f'{algorithm_names.get(algorithm, algorithm)} ({combined_data["periods_count"]} периодов)')
+            ax.set_xlabel('Уровень жидкости, см', fontsize=11)
+            ax.set_ylabel('Объем, л', fontsize=11)
+            ax.grid(True, alpha=0.3)
+            ax.legend(fontsize=8)
 
-        plt.xlabel('Уровень жидкости, см', fontsize=12)
-        plt.ylabel('Объем, л', fontsize=12)
-        plt.title(f'Сравнение объединенных характеристик\n{self.name}', fontsize=14)
-        plt.legend(fontsize=10)
-        plt.grid(True, alpha=0.3)
         plt.tight_layout()
-
-        # Сохранение графика
-        filename = f'algorithms_comparison_period1.png'
-        filepath = f'plots/{self.plot_subdir}/{filename}'
+        filename = 'smoothed_curves_periods_only.png'
+        filepath = os.path.join('plots', self.plot_subdir, filename)
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        plt.show()
+        plt.close(fig)
+        print(f"   График периодов до интерполяции сохранён: {filepath}")
 
-        print(f"   График сравнения алгоритмов сохранен: {filepath}")
+    def visualize_derivative_for_combined(self, algorithm: str):
+        """Построение производной объединённой характеристики и сравнение с точной геометрией.
+
+        Здесь производная считается непосредственно по уже усреднённой кривой (Hc, Vc).
+        Для сравнения идеальную кривую интерполируем на те же H и считаем её производную.
+        """
+        if algorithm not in self.combined_characteristics:
+            return
+
+        combined = self.combined_characteristics[algorithm]
+        Hc = combined.get('H', np.array([]))
+        Vc = combined.get('V', np.array([]))
+        if Hc.size == 0 or Vc.size == 0:
+            return
+
+        # Сортируем H/V по возрастанию H
+        sort_idx = np.argsort(Hc)
+        Hc_s = Hc[sort_idx]
+        Vc_s = Vc[sort_idx]
+
+        if Hc_s.size < 2:
+            return
+
+        # Идеальная кривая (полная)
+        H_geom_full, V_geom_full = self.geometry.calculate_ideal_curve()
+
+        # Интерполируем идеальную кривую на узлы объединённой характеристики
+        V_geom_on_Hc = np.interp(Hc_s, H_geom_full, V_geom_full)
+
+        # Вычисляем производные напрямую на узлах объединённой характеристики
+        dV_comb = calculate_derivative(Hc_s, Vc_s)
+        dV_ideal_on_Hc = calculate_derivative(Hc_s, V_geom_on_Hc)
+
+        # Ошибка производной (Del_V2) в процентах
+        eps = 1e-10
+        Del_V2 = ((dV_ideal_on_Hc - dV_comb) / (dV_ideal_on_Hc + eps)) * 100
+
+        # Рисуем график ошибок и значений производных
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+
+        ax1.plot(Hc_s, Del_V2, 'r--', label='Del_V2 - ошибка производной объединённой характеристики')
+        ax1.axhline(y=0, color='k', linestyle='--', alpha=0.5)
+        ax1.set_ylabel('Ошибка производной (%)')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        ax1.set_title('Ошибка производной объединённой характеристики')
+
+        ax2.plot(Hc_s, dV_ideal_on_Hc, 'b-', label='dV - идеальная производная (на H_combined)')
+        ax2.plot(Hc_s, dV_comb, 'r--', label=f'dV - {algorithm} (объединённая)')
+        ax2.set_xlabel('H, см')
+        ax2.set_ylabel('Производная объёма (л/см)')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        filename = f'derivative_analysis_{algorithm}_combined.png'
+        filepath = os.path.join('plots', self.plot_subdir, filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+        print(f"   Сохранён график производной (combined): {filepath}")
+
+    def visualize_derivatives_all(self):
+        """Визуализация производных для всех алгоритмов: и объединённой характеристики, и периодов."""
+        for algorithm in self.periodic_config.smoothing_algorithms:
+            try:
+                self.visualize_derivative_for_combined(algorithm)
+            except Exception as e:
+                print(f"Ошибка при построении производной для combined {algorithm}: {e}")
+            # Примечание: производные по отдельным периодам не строим — используем только усреднённую кривую
 
     def print_periods_statistics(self):
         """Вывод статистики по периодам"""
