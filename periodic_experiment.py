@@ -421,47 +421,14 @@ class PeriodicDrainingExperiment(CylinderExperiment):
                         else:
                             # Интерполяция внутри диапазона
                             V_interp = np.interp(H_grid_ascending, H_valid, V_valid)
-
-                            # Линейная экстраполяция по последним/первым n точкам
-                            n_for_extrap = 3
-                            # нижняя сторона
-                            if H_valid.size >= 2:
-                                n_low = min(n_for_extrap, H_valid.size)
-                                # используем первые n_low точек для оценки наклона
-                                idx_low_start = 0
-                                idx_low_end = n_low - 1
-                                denom_low = (H_valid[idx_low_end] - H_valid[idx_low_start])
-                                if abs(denom_low) > 1e-12:
-                                    slope_low = (V_valid[idx_low_end] - V_valid[idx_low_start]) / denom_low
-                                else:
-                                    slope_low = 0.0
-                            else:
-                                slope_low = 0.0
-
-                            # верхняя сторона
-                            if H_valid.size >= 2:
-                                n_high = min(n_for_extrap, H_valid.size)
-                                idx_high_start = -n_high
-                                idx_high_end = -1
-                                denom_high = (H_valid[idx_high_end] - H_valid[idx_high_start])
-                                if abs(denom_high) > 1e-12:
-                                    slope_high = (V_valid[idx_high_end] - V_valid[idx_high_start]) / denom_high
-                                else:
-                                    slope_high = 0.0
-                            else:
-                                slope_high = 0.0
-
+                            # Отключаем экстраполяцию: оставляем значения вне диапазона как NaN
                             V_grid_ascending = V_interp.copy()
-
-                            # обработка точек слева от H_valid[0]
                             left_mask = H_grid_ascending < H_valid[0]
-                            if np.any(left_mask):
-                                V_grid_ascending[left_mask] = V_valid[0] + slope_low * (H_grid_ascending[left_mask] - H_valid[0])
-
-                            # обработка точек справа от H_valid[-1]
                             right_mask = H_grid_ascending > H_valid[-1]
+                            if np.any(left_mask):
+                                V_grid_ascending[left_mask] = np.nan
                             if np.any(right_mask):
-                                V_grid_ascending[right_mask] = V_valid[-1] + slope_high * (H_grid_ascending[right_mask] - H_valid[-1])
+                                V_grid_ascending[right_mask] = np.nan
                 except Exception as e:
                     print(f"    Ошибка безопасной интерполяции для периода {smoothed_period.get('period_id', '?')}: {e}")
                     V_grid_ascending = np.full_like(H_grid_ascending, np.nan, dtype=float)
@@ -575,32 +542,109 @@ class PeriodicDrainingExperiment(CylinderExperiment):
             H_combined = np.array(H_combined)
             V_combined = np.array(V_combined)
 
-            # Сохраняем объединенную характеристику
+            # Сохраняем необработанную (raw) версию для диагностики
+            V_raw = V_combined.copy()
+
+            # DEBUG_BREAKPOINT: здесь можно поставить точку останова, чтобы проинспектировать
+            # переменную `height_volumes` или файл дампа cloud_before_agg_{algorithm}.csv
+            # для визуальной проверки облака значений перед агрегацией.
+
+            # Простое сглаживание объединённой характеристики тем же алгоритмом SciPy (UnivariateSpline)
+            # используем ту же функцию `scipy_smooth`, что применяется к периодам.
+            V_smoothed = V_combined.copy()
+            if H_combined.size >= 2:
+                try:
+                    # scipy_smooth ожидает индексы I_beg/I_end для диапазона сглаживания
+                    V_smoothed = scipy_smooth(H_combined, V_smoothed, 0, len(H_combined) - 1, smooth_factor=0.1)
+                except Exception as e:
+                    print(f"    Ошибка при сглаживании объединённой характеристики ({algorithm}): {e}")
+                    V_smoothed = V_raw.copy()
+
+            # Дополнительно: усиленное сглаживание (чтобы сравнить эффект)
+            V_smoothed_stronger = V_raw.copy()
+            stronger_factor = getattr(self.periodic_config, 'combined_smooth_factor', None)
+            if stronger_factor is None:
+                # значение по умолчанию для сильного сглаживания
+                stronger_factor = 1.0
+
+            if H_combined.size >= 2:
+                try:
+                    V_smoothed_stronger = scipy_smooth(H_combined, V_smoothed_stronger, 0, len(H_combined) - 1,
+                                                        smooth_factor=float(stronger_factor))
+                except Exception as e:
+                    print(f"    Ошибка при усиленном сглаживании объединённой характеристики ({algorithm}): {e}")
+                    V_smoothed_stronger = V_raw.copy()
+
+            # Сохраняем объединенную (сглаженную) характеристику и raw-версию
             self.combined_characteristics[algorithm] = {
                 'H': H_combined,
-                'V': V_combined,
+                'V': V_smoothed,
+                'V_raw': V_raw,
+                'V_stronger': V_smoothed_stronger,
                 'periods_count': len(height_volumes)
             }
 
             # Дополнительно сохраняем объединённую характеристику и counts в CSV для удобного анализа
             try:
                 combined_path = os.path.join('plots', self.plot_subdir, f'combined_{algorithm}.csv')
-                with open(combined_path, 'w', newline='', encoding='utf-8') as f2:
-                    import csv
-                    ww = csv.writer(f2)
-                    ww.writerow(['H_cm', 'V_l'])
-                    for hh, vv in zip(H_combined, V_combined):
-                        ww.writerow([hh, vv])
+                # В файл combined записываем именно сглаженную версию объединённой характеристики
+                try:
+                    with open(combined_path, 'w', newline='', encoding='utf-8') as f2:
+                        import csv
+                        ww = csv.writer(f2)
+                        ww.writerow(['H_cm', 'V_l'])
+                        # берем значения из сохранённой сглаженной версии
+                        V_to_write = self.combined_characteristics[algorithm].get('V', V_raw)
+                        for hh, vv in zip(H_combined, V_to_write):
+                            ww.writerow([hh, vv])
+                except Exception as e:
+                    print(f"    Ошибка при сохранении combined CSV (smoothing): {e}")
                 counts_path = os.path.join('plots', self.plot_subdir, f'counts_{algorithm}.csv')
-                with open(counts_path, 'w', newline='', encoding='utf-8') as f3:
-                    import csv
-                    ww = csv.writer(f3)
-                    ww.writerow(['node_cm', 'count'])
-                    for node in sorted(height_volumes.keys()):
-                        ww.writerow([node, len(height_volumes[node])])
-                print(f"    Сохранены combined CSV: {combined_path} и counts CSV: {counts_path}")
+                try:
+                    with open(counts_path, 'w', newline='', encoding='utf-8') as f3:
+                        import csv
+                        ww = csv.writer(f3)
+                        ww.writerow(['node_cm', 'count'])
+                        for node in sorted(height_volumes.keys()):
+                            ww.writerow([node, len(height_volumes[node])])
+                    print(f"    Сохранены combined CSV: {combined_path} и counts CSV: {counts_path}")
+                except Exception as e:
+                    print(f"    Не удалось сохранить counts CSV: {e}")
             except Exception as e:
                 print(f"    Не удалось сохранить combined/counts CSV: {e}")
+            # Сохраняем также файл с усиленным сглаживанием и график сравнения
+            try:
+                print(f"    Попытка сохранить усиленное сглаживание для алгоритма {algorithm} в {os.path.join('plots', self.plot_subdir)}")
+                os.makedirs(os.path.join('plots', self.plot_subdir), exist_ok=True)
+                combined_strong_path = os.path.join('plots', self.plot_subdir, f'combined_{algorithm}_strong.csv')
+                with open(combined_strong_path, 'w', newline='', encoding='utf-8') as f4:
+                    import csv
+                    ww = csv.writer(f4)
+                    ww.writerow(['H_cm', 'V_raw_l', 'V_smoothed_l', 'V_smoothed_stronger_l'])
+                    for hh, vraw, vs, vst in zip(H_combined, V_raw, V_smoothed, V_smoothed_stronger):
+                        ww.writerow([hh, vraw, vs, vst])
+
+                # Построим сравнительный график raw / original smooth / stronger smooth
+                try:
+                    import matplotlib.pyplot as plt
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.plot(H_combined, V_raw, color='gray', linewidth=0.8, alpha=0.8, label='Raw average')
+                    ax.plot(H_combined, V_smoothed, color='blue', linewidth=1.2, alpha=0.9, label='Smoothed (orig)')
+                    ax.plot(H_combined, V_smoothed_stronger, color='red', linewidth=2.0, alpha=0.9, label='Smoothed (strong)')
+                    ax.set_xlabel('Уровень жидкости, см')
+                    ax.set_ylabel('Объем, л')
+                    ax.set_title(f'Combined smoothing comparison - {algorithm}')
+                    ax.legend()
+                    ax.grid(True, alpha=0.3)
+                    comp_path = os.path.join('plots', self.plot_subdir, f'combined_comparison_{algorithm}.png')
+                    plt.tight_layout()
+                    plt.savefig(comp_path, dpi=300, bbox_inches='tight')
+                    plt.close(fig)
+                    print(f"    Сохранён сравнительный график сглаживаний: {comp_path}")
+                except Exception as e:
+                    print(f"    Не удалось построить сравнительный график: {e}")
+            except Exception as e:
+                print(f"    Не удалось сохранить combined strong CSV: {e}")
 
         # Диагностический вывод глобального min/max высот
         for algorithm in self.periodic_config.smoothing_algorithms:
@@ -658,7 +702,7 @@ class PeriodicDrainingExperiment(CylinderExperiment):
         filename = f'algorithms_comparison_period1.png'
         filepath = f'plots/{self.plot_subdir}/{filename}'
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        plt.show()
+        plt.close()
 
         print(f"   График сравнения алгоритмов сохранен: {filepath}")
 
@@ -785,7 +829,7 @@ class PeriodicDrainingExperiment(CylinderExperiment):
         filename = f'periodic_draining_levels.png'
         filepath = f'plots/{self.plot_subdir}/{filename}'
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        plt.show()
+        plt.close()
 
         print(f"   График сохранен: {filepath}")
 
@@ -853,7 +897,7 @@ class PeriodicDrainingExperiment(CylinderExperiment):
         filename = f'smoothed_curves_comparison.png'
         filepath = f'plots/{self.plot_subdir}/{filename}'
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        plt.show()
+        plt.close()
 
         print(f"   График сглаженных кривых сохранен: {filepath}")
 
