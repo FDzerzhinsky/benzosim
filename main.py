@@ -1,34 +1,30 @@
 # main.py
 """
-Главный скрипт для запуска экспериментов с цилиндром.
-Теперь с поддержкой периодических экспериментов.
+Главный скрипт для запуска непериодических экспериментов с цилиндром.
+Для периодических экспериментов используйте main_periodic.py
 """
 
 from experiment import CylinderExperiment
 from visualization import ExperimentVisualizer, DataExporter
-from config import ExperimentConfig, ObstacleType
-from periodic_experiment import PeriodicDrainingExperiment, PeriodicExperimentConfig
-import numpy as np
-from typing import Dict, Tuple
+import os
+from config import ExperimentConfig, ObstacleType, NON_PERIODIC_CONFIGS
+from typing import Dict
 
 
 def main():
     """
     Основная функция запуска экспериментов.
-    Запускает все комбинации алгоритмов и типов помех.
+    Запускает непериодические эксперименты.
     """
-    print("ЭКСПЕРИМЕНТ С ЦИЛИНДРОМ НА БОКУ")
+    print("ЭКСПЕРИМЕНТ С ЦИЛИНДРОМ НА БОКУ (НЕПЕРИОДИЧЕСКИЙ)")
     print("=" * 60)
 
     experiments_data = {}
     experiment_objects = {}
 
     try:
-        # ВАРИАНТ 1: Обычные эксперименты (раскомментировать при необходимости)
-        # run_standard_experiments(experiments_data, experiment_objects)
-
-        # ВАРИАНТ 2: Периодические эксперименты
-        run_periodic_experiments(experiments_data, experiment_objects)
+        # Запуск стандартных (непериодических) экспериментов
+        run_standard_experiments(experiments_data, experiment_objects)
 
     except Exception as e:
         print(f"Ошибка в основном цикле: {e}")
@@ -40,78 +36,36 @@ def main():
 
 
 def run_standard_experiments(experiments_data: Dict, experiment_objects: Dict):
-    """Запуск стандартных экспериментов"""
-    # [существующий код запуска стандартных экспериментов]
-    pass
-
-
-def run_periodic_experiments(experiments_data: Dict, experiment_objects: Dict):
-    """Запуск периодических экспериментов"""
-    print("\nЗАПУСК ПЕРИОДИЧЕСКИХ ЭКСПЕРИМЕНТОВ")
+    """Запуск непериодических экспериментов из NON_PERIODIC_CONFIGS"""
+    print("\nЗАПУСК НЕПЕРИОДИЧЕСКИХ ЭКСПЕРИМЕНТОВ")
     print("=" * 50)
 
-    # Конфигурации для разных типов помех
-    periodic_configs = [
-        PeriodicExperimentConfig(
-            obstacle_type=ObstacleType.NONE,
-            n_periods=3,
-            refill_min_level=60.0,
-            refill_max_level=170.0,
-            min_final_level=15.0,
-            min_drain_step=2.0,
-            max_drain_step=8.0,
-            level_precision=1,
-            enable_period_plotting=True,
-            name="Без помех"
-        ),
-        PeriodicExperimentConfig(
-            obstacle_type=ObstacleType.PARALLELEPIPED,
-            n_periods=4,
-            refill_min_level=80.0,
-            refill_max_level=160.0,
-            min_final_level=20.0,
-            min_drain_step=1.5,
-            max_drain_step=6.0,
-            level_precision=1,
-            enable_period_plotting=True,
-            name="С параллелепипедом"
-        ),
-        PeriodicExperimentConfig(
-            obstacle_type=ObstacleType.CYLINDER,
-            n_periods=3,
-            refill_min_level=70.0,
-            refill_max_level=150.0,
-            min_final_level=25.0,
-            min_drain_step=2.0,
-            max_drain_step=7.0,
-            level_precision=2,
-            enable_period_plotting=True,
-            name="С цилиндрической помехой"
-        ),
-        PeriodicExperimentConfig(
-            obstacle_type=ObstacleType.MULTIPLE_PARALLELEPIPEDS,
-            n_periods=5,
-            refill_min_level=50.0,
-            refill_max_level=180.0,
-            min_final_level=10.0,
-            min_drain_step=3.0,
-            max_drain_step=10.0,
-            level_precision=1,
-            enable_period_plotting=True,
-            name="С 4 параллелепипедами"
-        )
-    ]
+    # Используем конфигурации, определённые в config.py
+    for config in NON_PERIODIC_CONFIGS:
+        # Формируем путь для сохранения графиков
+        output_dir = os.path.join('plots', 'non_periodic', config.name)
+        os.makedirs(output_dir, exist_ok=True)
+        # Сохраняем путь в конфигурацию (добавляем атрибут динамически)
+        setattr(config, 'output_dir', output_dir)
 
-    for config in periodic_configs:
-        experiment_name = f"Периодический - {config.name}"
+        experiment_name = f"NonPeriodic - {config.name}"
         print(f"\n--- {experiment_name} ---")
 
-        experiment = PeriodicDrainingExperiment(config, experiment_name)
+        experiment = CylinderExperiment(config, experiment_name)
         data = experiment.run_experiment()
 
         if data:
             experiments_data[experiment_name] = data
             experiment_objects[experiment_name] = experiment
+
+
+def run_periodic_experiments(experiments_data: Dict, experiment_objects: Dict):
+    """
+    Запуск периодических экспериментов.
+    Примечание: Для периодических экспериментов используйте main_periodic.py
+    """
+    print("\nВНИМАНИЕ: Для периодических экспериментов используйте main_periodic.py")
+    print("Этот файл (main.py) предназначен для непериодических экспериментов.")
 
 
 def _print_final_report(experiments_data: Dict):
@@ -122,15 +76,11 @@ def _print_final_report(experiments_data: Dict):
 
     print(f"Успешно выполнено экспериментов: {len(experiments_data)}")
 
-    # Фильтруем периодические эксперименты
-    periodic_experiments = {k: v for k, v in experiments_data.items() if "Периодический" in k}
-
-    if periodic_experiments:
-        print(f"Периодических экспериментов: {len(periodic_experiments)}")
+    if experiments_data:
         print("\nСозданные графики в папке 'plots/':")
-        for exp_name in periodic_experiments.keys():
+        for exp_name in experiments_data.keys():
             safe_name = exp_name.replace(" ", "_").replace("-", "_")
-            print(f"  periodic_draining_{safe_name}.png")
+            print(f"  {safe_name}.png")
 
 
 if __name__ == "__main__":

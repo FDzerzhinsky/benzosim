@@ -220,3 +220,31 @@ QUICK_TEST_CONFIG = PeriodicExperimentConfig(
     enable_smoothing_plots=True,
     name="Быстрый тест"
 )
+
+# =============================================================================
+# NON-PERIODIC CONFIGURATIONS
+# =============================================================================
+# Три конфигурации для непериодических экспериментов, каждая использует один
+# из алгоритмов сглаживания. Параметры берутся из QUICK_TEST_CONFIG, но без
+# ограничения "smoothing_algorithms" (это относится только к периодическим).
+
+NON_PERIODIC_CONFIGS = [
+    ExperimentConfig(
+        # Параметры геометрии и шума берём из QUICK_TEST_CONFIG (по умолчанию)
+        obstacle_type=ObstacleType.NONE,
+        name="NonPeriodic_SciPy",
+        use_original_smoothing=False,  # SciPy
+    ),
+    ExperimentConfig(
+        obstacle_type=ObstacleType.NONE,
+        name="NonPeriodic_Sg1",
+        use_original_smoothing=True,   # оригинальный алгоритм
+        Sg_p=1,
+    ),
+    ExperimentConfig(
+        obstacle_type=ObstacleType.NONE,
+        name="NonPeriodic_Sg2",
+        use_original_smoothing=True,
+        Sg_p=2,
+    ),
+]

@@ -52,8 +52,11 @@ class ExperimentVisualizer:
             Vs_smooth: Сглаженные значения объемов
             experiment_name: Название эксперимента для подписей
         """
-        # Создаем папку для графиков если её нет
-        os.makedirs('plots', exist_ok=True)
+        # Определяем базовую директорию для графиков. Если в конфигурации указано
+        # атрибут ``output_dir`` (устанавливается в main.py), используем его,
+        # иначе сохраняем в стандартную папку ``plots``.
+        self.base_dir = getattr(self.results.config, 'output_dir', 'plots')
+        os.makedirs(self.base_dir, exist_ok=True)
 
         print(f"\nСоздание графиков для эксперимента: {experiment_name}")
 
@@ -127,7 +130,7 @@ class ExperimentVisualizer:
         plt.grid(True, alpha=0.3)
         plt.title(f'Основные кривые {experiment_name}')
         plt.tight_layout()
-        plt.savefig(f'plots/main_curves_{experiment_name.replace(" ", "_")}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.base_dir, f'main_curves_{experiment_name.replace(" ", "_")}.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
     def _plot_measurement_errors(self, H_ideal: np.ndarray, V_ideal: np.ndarray,
@@ -169,7 +172,7 @@ class ExperimentVisualizer:
                  bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
         plt.tight_layout()
-        plt.savefig(f'plots/measurement_errors_{experiment_name.replace(" ", "_")}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.base_dir, f'measurement_errors_{experiment_name.replace(" ", "_")}.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
     def _plot_smoothing_process(self, experiment_name: str):
@@ -207,7 +210,7 @@ class ExperimentVisualizer:
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.title(f'Процесс сглаживания данных - {experiment_name}')
-        plt.savefig(f'plots/smoothing_process_{experiment_name.replace(" ", "_")}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.base_dir, f'smoothing_process_{experiment_name.replace(" ", "_")}.png'), dpi=300, bbox_inches='tight')
         plt.close()
         print(f"График процесса сглаживания создан: {len(iterations)} итераций")
 
@@ -232,7 +235,7 @@ class ExperimentVisualizer:
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.title('Точность интерполяции в промежуточных точках')
-        plt.savefig(f'plots/half_nodes_errors_{experiment_name.replace(" ", "_")}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.base_dir, f'half_nodes_errors_{experiment_name.replace(" ", "_")}.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
     def _plot_derivative_analysis(self, Hs: np.ndarray, experiment_name: str):
@@ -269,7 +272,7 @@ class ExperimentVisualizer:
         ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
-        plt.savefig(f'plots/derivative_analysis_{experiment_name.replace(" ", "_")}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.base_dir, f'derivative_analysis_{experiment_name.replace(" ", "_")}.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
     def create_comparison_plots(self, experiments_data: Dict[str, tuple], experiment_objects: Dict[str, Any]):
