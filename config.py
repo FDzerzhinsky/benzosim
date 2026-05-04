@@ -39,7 +39,7 @@ class ExperimentConfig:
     I_beg: int = 50  # Начальный индекс рабочего диапазона
     I_end: int = 150  # Конечный индекс рабочего диапазона
     I_p: int = 10  # Дополнительные точки для сглаживания
-    Ro: float = 0.035  # Параметр сглаживания
+    Ro: float = 0.008  # Параметр сглаживания
     Sg_p: int = 1  # Параметр метода сглаживания: 1 - конечные разности, 2 - сплайны
 
     # Параметры параллелепипеда (помеха)
@@ -224,13 +224,15 @@ QUICK_TEST_CONFIG = PeriodicExperimentConfig(
 # =============================================================================
 # NON-PERIODIC CONFIGURATIONS
 # =============================================================================
-# Три конфигурации для непериодических экспериментов, каждая использует один
-# из алгоритмов сглаживания. Параметры берутся из QUICK_TEST_CONFIG, но без
-# ограничения "smoothing_algorithms" (это относится только к периодическим).
+# Конфигурации для непериодических экспериментов.
+# Комбинируют все типы препятствий с тремя алгоритмами сглаживания:
+# - SciPy (use_original_smoothing=False)
+# - Original Sg1 (use_original_smoothing=True, Sg_p=1)
+# - Original Sg2 (use_original_smoothing=True, Sg_p=2)
 
 NON_PERIODIC_CONFIGS = [
+    # ========== БЕЗ ПРЕПЯТСТВИЙ ==========
     ExperimentConfig(
-        # Параметры геометрии и шума берём из QUICK_TEST_CONFIG (по умолчанию)
         obstacle_type=ObstacleType.NONE,
         name="NonPeriodic_SciPy",
         use_original_smoothing=False,  # SciPy
@@ -244,6 +246,63 @@ NON_PERIODIC_CONFIGS = [
     ExperimentConfig(
         obstacle_type=ObstacleType.NONE,
         name="NonPeriodic_Sg2",
+        use_original_smoothing=True,
+        Sg_p=2,
+    ),
+    
+    # ========== С ПАРАЛЛЕЛЕПИПЕДОМ ==========
+    ExperimentConfig(
+        obstacle_type=ObstacleType.PARALLELEPIPED,
+        name="NonPeriodic_Parallelepiped_SciPy",
+        use_original_smoothing=False,  # SciPy
+    ),
+    ExperimentConfig(
+        obstacle_type=ObstacleType.PARALLELEPIPED,
+        name="NonPeriodic_Parallelepiped_Sg1",
+        use_original_smoothing=True,   # оригинальный алгоритм
+        Sg_p=1,
+    ),
+    ExperimentConfig(
+        obstacle_type=ObstacleType.PARALLELEPIPED,
+        name="NonPeriodic_Parallelepiped_Sg2",
+        use_original_smoothing=True,
+        Sg_p=2,
+    ),
+    
+    # ========== С ЦИЛИНДРОМ ==========
+    ExperimentConfig(
+        obstacle_type=ObstacleType.CYLINDER,
+        name="NonPeriodic_Cylinder_SciPy",
+        use_original_smoothing=False,  # SciPy
+    ),
+    ExperimentConfig(
+        obstacle_type=ObstacleType.CYLINDER,
+        name="NonPeriodic_Cylinder_Sg1",
+        use_original_smoothing=True,   # оригинальный алгоритм
+        Sg_p=1,
+    ),
+    ExperimentConfig(
+        obstacle_type=ObstacleType.CYLINDER,
+        name="NonPeriodic_Cylinder_Sg2",
+        use_original_smoothing=True,
+        Sg_p=2,
+    ),
+    
+    # ========== С 4 ПАРАЛЛЕЛЕПИПЕДАМИ ==========
+    ExperimentConfig(
+        obstacle_type=ObstacleType.MULTIPLE_PARALLELEPIPEDS,
+        name="NonPeriodic_Multiple_Parallelepipeds_SciPy",
+        use_original_smoothing=False,  # SciPy
+    ),
+    ExperimentConfig(
+        obstacle_type=ObstacleType.MULTIPLE_PARALLELEPIPEDS,
+        name="NonPeriodic_Multiple_Parallelepipeds_Sg1",
+        use_original_smoothing=True,   # оригинальный алгоритм
+        Sg_p=1,
+    ),
+    ExperimentConfig(
+        obstacle_type=ObstacleType.MULTIPLE_PARALLELEPIPEDS,
+        name="NonPeriodic_Multiple_Parallelepipeds_Sg2",
         use_original_smoothing=True,
         Sg_p=2,
     ),

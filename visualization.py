@@ -3,7 +3,8 @@
 Визуализация результатов эксперимента с цилиндром в соответствии с оригинальным Pascal-кодом.
 Включает только те графики, которые соответствуют выводу оригинальной программы.
 """
-
+import sys
+print(sys.executable)
 import matplotlib
 
 matplotlib.use('Agg')
@@ -14,6 +15,12 @@ import pandas as pd
 from analysis import AnalysisResults
 from typing import Dict, List, Tuple, Any
 
+import numpy as np
+
+def r2_score(y_true, y_pred):
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    return 1 - np.sum((y_true - y_pred)**2) / np.sum((y_true - np.mean(y_true))**2)
 
 class ExperimentVisualizer:
     """
@@ -121,8 +128,8 @@ class ExperimentVisualizer:
                                 alpha=0.2, color='red', label='Область цилиндрической помехи')
 
         # Область анализа
-        plt.axvspan(H_ideal[self.results.config.I_beg], H_ideal[self.results.config.I_end],
-                    alpha=0.2, color='yellow', label='Область анализа (I_beg-I_end)')
+        #plt.axvspan(H_ideal[self.results.config.I_beg], H_ideal[self.results.config.I_end],
+                    #alpha=0.2, color='yellow', label='Область анализа (I_beg-I_end)')
 
         plt.xlabel('Высота H (см)')
         plt.ylabel('Объем V (л)')
@@ -261,7 +268,7 @@ class ExperimentVisualizer:
 
         # Значения производных
         ax2.plot(H_mid, self.results.derivative_stats['dV_ideal'], 'b-',
-                 label='dV - идеальная производная')
+                 label='dV - идеальная производная', alpha=0.5)
         ax2.plot(H_mid, self.results.derivative_stats['dVs'], 'r--',
                  label='dVs - производная зашумленных данных')
         ax2.plot(H_mid, self.results.derivative_stats['dVss'], 'g:',
@@ -274,6 +281,48 @@ class ExperimentVisualizer:
         plt.tight_layout()
         plt.savefig(os.path.join(self.base_dir, f'derivative_analysis_{experiment_name.replace(" ", "_")}.png'), dpi=300, bbox_inches='tight')
         plt.close()
+        
+        # --- Отдельный график только для производных ---
+
+        
+
+        r2_sm = r2_score( self.results.derivative_stats['dV_ideal'], self.results.derivative_stats['dVss'])
+        r2_nz = r2_score( self.results.derivative_stats['dV_ideal'], self.results.derivative_stats['dVs'])
+        fig2, ax = plt.subplots(figsize=(12, 5))
+        
+        ax.plot(H_mid, self.results.derivative_stats['dV_ideal'], 'b-',
+            label='dV - идеальная производная', alpha=0.4)
+        ax.plot(H_mid, self.results.derivative_stats['dVs'], 'r--',
+            label='dVs - производная зашумленных данных')
+        ax.plot(H_mid, self.results.derivative_stats['dVss'], 'g:',
+            label='dVss - производная сглаженных данных')
+        
+        ax.set_xlabel('Высота H (см)')
+        ax.set_ylabel('Производная объема (л/см)')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_title('Производные объема')
+        ax.text(
+                0.08, -0.03,
+                f"R²сгл = {r2_sm:.4f}\nR²шум = {r2_nz:.4f}",
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment='top',
+                horizontalalignment='right',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8)
+)
+        plt.tight_layout()
+        plt.savefig(
+        os.path.join(
+            self.base_dir,
+            f'derivatives_only_{experiment_name.replace(" ", "_")}.png'
+            ),
+                            dpi=300,
+                        bbox_inches='tight'
+)
+        plt.close()
+
+        
 
     def create_comparison_plots(self, experiments_data: Dict[str, tuple], experiment_objects: Dict[str, Any]):
         """
@@ -339,8 +388,8 @@ class ExperimentVisualizer:
                     ax.plot(Hs, Vs_smooth, '-', linewidth=1.5, color=color, label=target_name)
 
                     # Область анализа
-                    ax.axvspan(H_ideal[self.results.config.I_beg], H_ideal[self.results.config.I_end],
-                               alpha=0.2, color='yellow', label='Область анализа')
+                    #ax.axvspan(H_ideal[self.results.config.I_beg], H_ideal[self.results.config.I_end],
+                               #alpha=0.2, color='yellow', label='Область анализа')
 
                     # Области помех - ОБРАБОТКА МНОГИХ ПАРАЛЛЕЛЕПИПЕДОВ
                     if found_experiment:
